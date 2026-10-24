@@ -1,0 +1,5 @@
+# Windows launcher and installer scripts must keep their exact bytes (CRLF, BOM, UTF-16).
+*.bat -text
+*.ps1 -text
+*.vbs -text
+*.ico binary
