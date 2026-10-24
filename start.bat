@@ -1,6 +1,5 @@
 @echo off
 cd /d "%~dp0"
-rem 先關掉還在執行的舊討論室（只關佔用 3456 的程式）
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":3456" ^| findstr "LISTENING"') do taskkill /F /PID %%p >nul 2>&1
-node server.js
+rem Debug start: asks a running AI Roundtable to quit (only after verifying its lock file and identity), then runs it in this window.
+node app\server.js --replace
 pause

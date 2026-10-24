@@ -15,10 +15,12 @@ const ROOT = path.resolve(__dirname, '..'), UI = path.join(__dirname, 'ui');
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const APP = process.argv.includes('--app');
 
-async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-dir'), open = APP, protector } = {}) {
+async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-dir'), open = APP, protector, exitOnQuit = true } = {}) {
   const paths = resolvePaths({ appDir: ROOT, dataDir });
   fs.mkdirSync(paths.dataDir, { recursive: true });
 
+  // 安裝與解除安裝用：請正在執行的 AI圓桌會議 自己結束（先確認身分）
+  if (process.argv.includes('--stop')) { const r = await sec.stopRunning(paths.lockFile); console.log(r.stopped ? '已關閉 AI圓桌會議' : '沒有正在執行的 AI圓桌會議'); return { stopped: r.stopped }; }
   // 單一執行個體：已有確定是本程式的執行個體 → --replace 時請它結束，否則直接打開它的視窗
   const running = await sec.findRunning(paths.lockFile);
   if (running) {
@@ -30,6 +32,12 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
   try { store = openStore(paths, protector ? { protector } : {}); }
   catch (e) { console.log('\n無法開啟資料：' + e.message + '\n'); if (open) execFile('mshta', [`javascript:alert(${JSON.stringify('AI圓桌會議無法開啟資料：' + e.message)});close()`]); process.exit(1); }
   store.purgeExpired();
+  // 安裝程式記錄的「有訂閱的 AI」：第一次開啟時套用，其他設成手動貼上；只含 AI 代號，用完即刪
+  const firstRun = path.join(ROOT, 'first-run.json');
+  if (fs.existsSync(firstRun)) {
+    try { const chosen = JSON.parse(fs.readFileSync(firstRun, 'utf8')).auto || []; if (!store.db.settings.setupDone) for (const [k, a] of Object.entries(store.db.settings.ais)) a.mode = chosen.includes(k) ? 'auto' : 'manual'; store.save(); } catch {}
+    fs.rmSync(firstRun, { force: true });
+  }
   const engine = createEngine({ store, skills: () => scanSkills() });
 
   // 連接埠被其他程式占用時改用下一個，不會去結束別人的程式
@@ -39,8 +47,8 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
   for (let p = port, n = 0; ; p++, n++) { try { actual = await listen(p); break; } catch (e) { if (e.code !== 'EADDRINUSE' || n >= 9 || port === 0) throw e; } }
   const token = sec.newToken(), hosts = sec.hostsFor(actual), lock = sec.writeLock(paths.lockFile, actual);
   let lastHit = Date.now();
-  const quit = () => { sec.clearLock(paths.lockFile, lock); engine.stop(); server.close(); setTimeout(() => process.exit(0), 300).unref(); };
-  process.on('SIGINT', quit); process.on('SIGTERM', quit);
+  const quit = () => { sec.clearLock(paths.lockFile, lock); engine.stop(); server.close(); if (exitOnQuit) setTimeout(() => process.exit(0), 300).unref(); };
+  if (exitOnQuit) { process.on('SIGINT', quit); process.on('SIGTERM', quit); }
   if (open) setInterval(() => { if (!engine.busy && Date.now() - lastHit > 150000) quit(); }, 10000).unref();
 
   const send = (res, code, body, type = 'application/json') => {
