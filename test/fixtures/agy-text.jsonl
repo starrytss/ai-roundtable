@@ -1,0 +1,5 @@
+{"event":"init","conversation_id":"c","init":{"cwd":"C:work","tools":["ask_custom_permission","ask_permission","ask_question","browser_click_element","browser_drag_pixel_to_pixel","browser_get_dom","browser_get_network_request","browser_input"],"permission_mode":"request-review"}}
+{"event":"step_update","step_update":{"conversation_id":"x","step_index":0,"state":"DONE","step_type":"user_input"}}
+{"event":"step_update","step_update":{"conversation_id":"x","step_index":1,"state":"ACTIVE","step_type":"agent_response","text_delta":"OK"}}
+{"event":"step_update","step_update":{"conversation_id":"x","step_index":1,"state":"DONE","step_type":"agent_response","text_delta":"\n","duration_seconds":3.3444981,"usage":{"input_tokens":6811,"output_tokens":5,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":6816}}}
+{"event":"result","result":{"conversation_id":"x","status":"SUCCESS","response":"OK\n","duration_seconds":3.4909827,"num_turns":1,"usage":{"input_tokens":6811,"output_tokens":5,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":6816}}}
