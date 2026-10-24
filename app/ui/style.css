@@ -290,3 +290,21 @@ dialog .df { flex-wrap:wrap; align-items:center; }
 #extras:empty { display:none; }
 #pausewrap { display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
 #pausewrap[hidden] { display:none; }
+
+/* ---------- 第三階段 ---------- */
+#relaybtn[hidden] { display:none; }
+.stage-row { border:1px solid var(--line); border-radius:12px; padding:10px; margin:8px 0; }
+.stage-row .row2 { margin:4px 0; }
+.stage-no { font:700 13px var(--sans); color:var(--gold); }
+.diff { font:12.5px/1.6 var(--mono); border:1px solid var(--line); border-radius:10px; max-height:46vh; overflow:auto; }
+.diff div { padding:0 10px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.diff .add { background:color-mix(in srgb, var(--ok) 16%, transparent); }
+.diff .del { background:color-mix(in srgb, var(--danger) 14%, transparent); text-decoration:line-through; }
+.diff .add::before { content:'+ '; color:var(--ok); } .diff .del::before { content:'− '; color:var(--danger); } .diff .eq::before { content:'  '; }
+.fgrid { display:grid; grid-template-columns:minmax(200px, 1fr) 1.4fr; gap:10px; }
+.fgrid .blist { max-height:52vh; }
+.fgrid .blist div { cursor:pointer; }
+.fgrid .blist div.on { background:var(--sunk); }
+.fprev { border:1px solid var(--line); border-radius:10px; padding:8px 12px; max-height:52vh; overflow:auto; font-size:13.5px; }
+.branchnote { font-size:12.5px; color:var(--mut); margin:0 0 14px; }
+@media (max-width: 860px) { .fgrid { grid-template-columns:1fr; } }

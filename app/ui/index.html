@@ -50,11 +50,14 @@
         <span id="ais"></span>
         <button class="sel" id="skbtn" title="瀏覽已安裝的技能">⚡ 技能</button>
         <button class="sel" id="briefbtn" title="任務簡報：目標、對象、預算、時程">📋 簡報</button>
+        <button class="sel" id="matbtn" title="共用資料區：文件、網頁、參考資料">📎 資料</button>
+        <select id="outtpl" class="sel" title="成果格式（最後一步依這個格式輸出）"></select>
+        <button class="sel" id="relaybtn" title="分工接力的職務與棒次" hidden>🏃 接力設定</button>
         <label class="sel" id="pausewrap" title="每輪結束後先停下，讓你補充、略過某位 AI 或直接總結"><input type="checkbox" id="pause"> 每輪後暫停</label>
         <span class="grow"></span>
         <select id="mode" class="sel" title="討論模式">
           <option value="discuss">一般討論</option><option value="debate">正反辯論</option>
-          <option value="brainstorm">腦力激盪</option><option value="review">互相審查</option>
+          <option value="brainstorm">腦力激盪</option><option value="review">互相審查</option><option value="relay">分工接力</option>
         </select>
         <select id="rounds" class="sel" title="輪數"><option value="1">1 輪</option><option value="2" selected>2 輪</option><option value="3">3 輪</option></select>
         <span class="lbl">主持</span><select id="mod" class="sel" title="主持人（負責總結）"></select>
@@ -132,6 +135,29 @@
   <div class="dh"><span>整理共識與證據</span><button class="icon" data-close>✕</button></div>
   <div class="db" id="anBody"></div>
   <div class="df"><span class="grow"></span><button class="btn" data-close>取消</button><button class="btn gold" id="anGo">開始整理</button></div>
+</dialog>
+<dialog id="dlgRelay">
+  <div class="dh"><span>分工接力</span><button class="icon" data-close>✕</button></div>
+  <div class="db" id="relayBody"></div>
+  <div class="df"><button class="btn" id="relaySave">另存成團隊範本</button><span class="grow"></span><button class="btn" data-close>取消</button><button class="btn gold" id="relayUse">套用</button></div>
+</dialog>
+
+<dialog id="dlgMat">
+  <div class="dh"><span>共用資料區</span><button class="icon" data-close>✕</button></div>
+  <div class="db" id="matBody"></div>
+  <div class="df"><span class="small" id="matFoot"></span><span class="grow"></span><button class="btn" data-close>關閉</button><button class="btn gold" id="matUse">套用到這次提問</button></div>
+</dialog>
+
+<dialog id="dlgOut">
+  <div class="dh"><span>產生成果檔</span><button class="icon" data-close>✕</button></div>
+  <div class="db" id="outBody"></div>
+  <div class="df"><span class="grow"></span><button class="btn" data-close>取消</button><button class="btn gold" id="outGo">產生</button></div>
+</dialog>
+
+<dialog id="dlgDiff">
+  <div class="dh"><span>版本比較與採納紀錄</span><button class="icon" data-close>✕</button></div>
+  <div class="db" id="diffBody"></div>
+  <div class="df"><span class="grow"></span><button class="btn" data-close>關閉</button></div>
 </dialog>
 <div id="selbar" hidden></div>
 <div id="toast" role="status"></div>

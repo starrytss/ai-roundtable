@@ -185,18 +185,6 @@ export function bindData(reload) {
   };
 }
 
-/* ---------- 工作資料夾 ---------- */
-export async function openFiles() {
-  if (!S.cid) return toast('請先開始一個對話');
-  const r = await api('/api/files/list', { pid: S.pid, cid: S.cid });
-  if (r.error) return toast(r.error);
-  $('#filesBody').innerHTML = `<div class="small">這個對話的 AI 只會在這個資料夾裡讀寫檔案（實際限制依各 AI 的權限設定與 CLI 能力而定）。</div>
-    <div class="kv" style="margin:8px 0"><span>位置</span><span>${esc(r.dir)}</span></div>
-    <div class="blist">${r.files.map(f => `<div><span class="grow">${esc(f.path)}</span><span class="small">${f.link ? '連結（不跟隨）' : `${Math.ceil((f.size || 0) / 1024)} KB · ${when(f.mtime)}`}</span></div>`).join('') || '<div>目前沒有檔案</div>'}</div>`;
-  if (!$('#dlgFiles').open) $('#dlgFiles').showModal();
-  $('#filesOpen').onclick = () => api('/api/data/open', { which: 'work', pid: S.pid, cid: S.cid });
-}
-
 /* ---------- 專案 ---------- */
 export function bindProject(reload) {
   $('#projset').onclick = () => { const p = P() || {}; $('#pname').value = p.name || ''; $('#pinst').value = p.instructions || ''; $('#pmem').value = p.memory || ''; renderMemList(); $('#dlgProj').showModal(); };

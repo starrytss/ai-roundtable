@@ -1,5 +1,5 @@
 // 輸入區：選 AI、模式、主持人，送出前一定看得到「會傳給誰、預計幾次呼叫」
-import { $, S, api, esc, ai, av, col, toast, savePref, badge } from './core.js';
+import { $, S, api, esc, ai, av, col, toast, savePref, badge, P } from './core.js';
 
 const keys = () => Object.keys(S.D.settings.ais);
 // @Claude、@ChatGPT：只傳給被點名的 AI（這次提問暫時取代上方勾選）
@@ -12,11 +12,12 @@ export function mentioned(q = $('#q').value) {
   return out;
 }
 export function req(extra = {}) {
-  const p = S.pref, men = mentioned(), ids = men.length ? men : p.ids;
+  const p = S.pref, relay = $('#mode').value === 'relay', men = relay ? [] : mentioned(), ids = relay ? [...new Set((p.stages || []).map(x => x.ai))] : men.length ? men : p.ids;
   const mod = men.length ? (men.includes(p.mod) ? p.mod : men[0]) : $('#mod').value;
   return { pid: S.pid, cid: S.cid, q: $('#q').value.trim(), ids, mode: $('#mode').value, rounds: +$('#rounds').value, mod,
     modOutside: men.length ? false : !!p.modOutside, include: p.include || {}, redact: p.redact ?? S.D.settings.privacy.redact,
-    pause: !!p.pause, quote: p.quote || null, brief: p.brief || null, ...extra };
+    pause: !!p.pause, quote: p.quote || null, brief: p.brief || null,
+    stages: relay ? p.stages || [] : undefined, review: p.review !== false, outputTemplate: p.outputTemplate || '', materials: p.materials || null, ...extra };
 }
 
 export function renderComposer() {
@@ -33,9 +34,12 @@ export function renderComposer() {
     + (outside.length ? `<optgroup label="未勾選（仍會收到問題與最後一輪回答）">${outside.map(k => `<option value="${k}">${esc(ai(k).name)}（未參與）</option>`).join('')}</optgroup>` : '');
   $('#mod').value = p.mod;
   $('#mode').value = p.mode || 'discuss'; $('#rounds').value = p.rounds || '2';
-  const solo = p.ids.length < 2;
-  $('#rounds').disabled = $('#mod').disabled = $('#mode').disabled = solo;
-  $('#pause').checked = !!p.pause; $('#pausewrap').hidden = solo;
+  const relay = $('#mode').value === 'relay', solo = !relay && p.ids.length < 2;
+  $('#rounds').disabled = $('#mod').disabled = solo || relay; $('#mode').disabled = solo && !relay;
+  $('#rounds').hidden = $('#mod').hidden = $('#mod').previousElementSibling.hidden = relay;
+  $('#pause').checked = !!p.pause; $('#pausewrap').hidden = solo || relay; $('#relaybtn').hidden = !relay;
+  $('#outtpl').innerHTML = '<option value="">成果：不指定</option>' + (S.D.outputTemplates || []).map(t => `<option value="${t.key}">成果：${esc(t.name)}</option>`).join('');
+  $('#outtpl').value = p.outputTemplate || '';
   renderExtras(); refreshCheck();
 }
 
@@ -43,6 +47,12 @@ export function renderComposer() {
 export function renderExtras() {
   const p = S.pref, chips = [];
   if (p.quote) chips.push(`<span class="skchip url" title="${esc(p.quote.text)}"><span class="ic">❝</span><b>引用 ${esc(ai(p.quote.ai).name)}${p.quote.round ? ` 第 ${p.quote.round} 輪` : ''}</b><small>${esc(p.quote.text.slice(0, 40))}${p.quote.text.length > 40 ? '…' : ''}</small><button data-rmquote title="移除引用">✕</button></span>`);
+  if ($('#mode').value === 'relay') {
+    const st = p.stages || [];
+    chips.push(`<span class="skchip"><b>🏃 分工接力</b><small>${st.length ? st.map((x, i) => `${i + 1}. ${esc(x.role)}（${esc(ai(x.ai).name)}）`).join(' → ') : '還沒設定棒次'}${p.review !== false ? '　·　每棒驗收' : ''}</small><button data-editrelay title="編輯">✎</button></span>`);
+  }
+  const mats = (P() || {}).materials || [], chosen = p.materials ? mats.filter(m => p.materials.includes(m.id)) : mats.filter(m => m.auto !== false);
+  if (chosen.length) chips.push(`<span class="skchip"><b>📎 共用資料 ${chosen.length} 份</b><small>${chosen.map(m => esc(m.title)).slice(0, 3).join('、')}${chosen.length > 3 ? '…' : ''}${p.materials ? '（這次自選）' : ''}</small><button data-editmat title="選擇">✎</button></span>`);
   if (p.brief) {
     const F = S.D.briefFields || [], filled = F.filter(([k]) => String(p.brief.fields[k] || '').trim()).length, miss = F.filter(([k]) => !String(p.brief.fields[k] || '').trim() && (p.brief.ask || []).includes(k));
     chips.push(`<span class="skchip"><b>📋 ${esc(p.brief.template || '任務簡報')}</b><small>已填 ${filled} 項${miss.length ? `　·　缺：${miss.map(([, l]) => esc(l)).join('、')}` : ''}</small><button data-editbrief title="編輯">✎</button><button data-rmbrief title="移除簡報">✕</button></span>`);
@@ -86,14 +96,19 @@ export function usageText(ids) {
   }).join('　');
 }
 
-export function bindComposer({ onSend, onPreview, openAI, openBrief }) {
+export function bindComposer({ onSend, onPreview, openAI, openBrief, openRelay, openMaterials }) {
   $('#pause').onchange = e => { S.pref.pause = e.target.checked; savePref(); };
   $('#briefbtn').onclick = openBrief;
   $('#extras').onclick = e => {
     if (e.target.closest('[data-rmquote]')) { S.pref.quote = null; savePref(); renderExtras(); return refreshCheck(); }
     if (e.target.closest('[data-rmbrief]')) { S.pref.brief = null; savePref(); renderExtras(); return refreshCheck(); }
     if (e.target.closest('[data-editbrief]')) return openBrief();
+    if (e.target.closest('[data-editrelay]')) return openRelay();
+    if (e.target.closest('[data-editmat]')) return openMaterials();
   };
+  $('#outtpl').onchange = e => { S.pref.outputTemplate = e.target.value; savePref(); refreshCheck(); };
+  $('#relaybtn').onclick = () => openRelay();
+  $('#matbtn').onclick = () => openMaterials();
   $('#ais').onclick = e => {
     const b = e.target.closest('[data-ai]'); if (!b) return;
     const k = b.dataset.ai, p = S.pref;
@@ -101,7 +116,7 @@ export function bindComposer({ onSend, onPreview, openAI, openBrief }) {
     if (!p.ids.includes(p.mod) && !p.modOutside) p.mod = p.ids[0];
     savePref(); renderComposer(); renderHL();
   };
-  $('#mode').onchange = e => { S.pref.mode = e.target.value; savePref(); refreshCheck(); };
+  $('#mode').onchange = e => { S.pref.mode = e.target.value; savePref(); renderComposer(); if (e.target.value === 'relay' && !(S.pref.stages || []).length) openRelay(); };
   $('#rounds').onchange = e => { S.pref.rounds = e.target.value; savePref(); refreshCheck(); };
   $('#mod').onchange = e => { S.pref.mod = e.target.value; S.pref.modOutside = !S.pref.ids.includes(e.target.value); savePref(); refreshCheck(); };
   $('#check').onclick = e => {

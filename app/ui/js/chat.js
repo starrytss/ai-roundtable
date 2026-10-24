@@ -6,6 +6,7 @@ export const MODES = {
   discuss: { name: '一般討論', p1: '各自提案', pn: '互相評論', d: '各自提案 → 互相評論 → 主持人整理結論', ex: '幫我評估：週末快閃店要選百貨中庭還是捷運站？' },
   debate: { name: '正反辯論', p1: '立論', pn: '交鋒', d: '第一位當正方、第二位當反方，其餘當評審', ex: '公司該不該全面導入 AI 工具？' },
   brainstorm: { name: '腦力激盪', p1: '發想', pn: '延伸組合', d: '大量發想，再互相延伸，選出前三名', ex: '幫扭蛋店想 10 個社群互動活動' },
+  relay: { name: '分工接力', p1: '', pn: '', d: '依職務一棒接一棒：研究 → 企劃 → 審查 → 整理，每棒可驗收與退回修改', ex: '幫我規劃週年慶活動，從市場研究到最終企劃書' },
   review: { name: '互相審查', p1: '初答', pn: '嚴格審查', d: '先回答，再互相挑錯，得到最可靠的答案', ex: '檢查這段活動企劃有什麼風險：' },
 };
 export const texts = {};
@@ -79,18 +80,30 @@ function analysisBlock(t) {
   </div></details>`;
 }
 
+// 分工接力的驗收：通過交給下一棒、退回修改（意見只給這一棒）、不再驗收、停在這裡
+function relayReviewBlock(t) {
+  const r = t.waitingAfter, st = (t.stages || [])[r - 1] || {}, failed = (t.reasons || []).some(x => x.code === 'stage_failed'), last = r === (t.stages || []).length;
+  if (failed) return `<div class="notice bad" data-intervene="${t.id}"><b>第 ${r} 棒（${esc(st.role)}）沒有完成</b>，後面的棒次先暫停。可以在上面的卡片按「只重試這一步」，或停在這裡。<div class="tools"><button class="btn" data-iact="stop">停在這裡</button></div><textarea data-inote hidden></textarea></div>`;
+  return `<div class="notice" data-intervene="${t.id}"><b>第 ${r} 棒（${esc(st.role)}）完成，請驗收</b>${st.accept ? `<div class="small">驗收條件：${esc(st.accept)}</div>` : ''}
+    <textarea class="field" data-inote rows="2" style="width:100%;margin-top:6px" placeholder="要退回修改時，寫下要改的地方（只會給這一棒）"></textarea>
+    <div class="tools">${last ? '' : `<button class="btn gold" data-iact="continue">通過，交給第 ${r + 1} 棒</button>`}<button class="btn" data-iact="revise">退回修改</button>${last ? '' : '<button class="btn" data-iact="auto">不再驗收 自動跑完</button>'}<button class="btn" data-iact="stop">停在這裡</button></div></div>`;
+}
+
 function statusBlock(t, last, running) {
   if (running) return '';
-  if (t.status === 'waiting' && t.waitingAfter && !S.run) return interveneBlock(t);
+  if (t.status === 'waiting' && t.waitingAfter && !S.run) return t.mode === 'relay' ? relayReviewBlock(t) : interveneBlock(t);
   const L = live(t), failed = L.filter(s => s.kind === 'answer' && !s.userSkipped && ['error', 'stopped', 'skipped'].includes(s.status));
   const okAns = L.some(s => s.kind === 'answer' && s.status === 'ok'), sum = L.filter(s => s.kind === 'summary').pop();
   const btn = [];
   if (failed.length && !S.run) btn.push(`<button class="btn gold" data-retryall="${t.id}">重試失敗的 AI（${failed.length}）</button>`);
   if (t.ids.length > 1 && okAns && (!sum || sum.status !== 'ok') && !S.run) btn.push(`<button class="btn" data-resum="${t.id}">只重做主持人總結</button>`);
-  if (['interrupted', 'stopped', 'waiting'].includes(t.status) && L.some(s => ['pending', 'interrupted'].includes(s.status)) && !S.run) btn.push(`<button class="btn" data-resume="${t.id}">續跑未完成的步驟</button>`);
+  if (['interrupted', 'stopped'].includes(t.status) && L.some(s => ['pending', 'interrupted'].includes(s.status)) && !S.run) btn.push(`<button class="btn" data-resume="${t.id}">續跑未完成的步驟</button>`);
   if (last && t.ids.length > 1 && ['done', 'partial'].includes(t.status) && !S.run) btn.push(`<button class="btn" data-more="${t.id}">再討論一輪</button>`);
   if (t.summary) btn.push(`<button class="btn" data-mem="${t.id}">＋ 加入專案記憶</button><button class="btn" data-copysum="${t.id}">複製結論</button>`);
   if (okAns && t.ids.length > 1 && !S.run) btn.push(`<button class="btn" data-analyze="${t.id}">整理共識與證據</button>`);
+  if (t.summary && !S.run) btn.push(`<button class="btn" data-outfile="${t.id}">產生檔案</button>`);
+  if (!S.run) btn.push(`<button class="btn" data-cmp="${t.id}">比較版本</button>`);
+  if ((okAns || L.some(s => s.kind === 'stage' && s.status === 'ok')) && !S.run) btn.push(`<button class="btn" data-branch="${t.id}">建立分支</button>`);
   btn.push(`<button class="btn" data-reask="${t.id}">重新提問</button>`);
   const reasons = (t.reasons || []).filter(r => !['stopped', 'interrupted'].includes(r.code) || t.status !== r.code);
   return `<div class="tstatus"><span class="st ${t.status}">${STATUS[t.status] || esc(t.status)}</span>${t.status === 'interrupted' ? '<span class="small">程式在討論中被關閉，已完成的回答都保留了。</span>' : ''}</div>
@@ -115,18 +128,30 @@ export function renderChat() {
   $('#title').textContent = chat.title;
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 160;
   const run = S.run && S.run.pid === S.pid && S.run.cid === S.cid ? S.run : null;
-  box.innerHTML = chat.turns.map((t, ti) => {
+  const branchNote = chat.branchOf ? `<div class="branchnote">↳ 分支自「<span class="lnk" data-gochat="${chat.branchOf.cid}">${esc(chat.branchOf.title)}</span>」第 ${chat.branchOf.round} 輪之後；之後的討論只在這個分支，不會影響原本的對話。</div>` : '';
+  box.innerHTML = branchNote + chat.turns.map((t, ti) => {
     if (!t.steps) return '';
     const last = ti === chat.turns.length - 1, running = run && run.turnId === t.id, M = MODES[t.mode] || MODES.discuss, solo = t.ids.length === 1;
     const busy = running ? run.busy : [], L = live(t), busyIds = new Set(busy.map(b => b.stepId));
     const who = t.ids.map(i => esc(ai(i).name)).join('、') + (solo ? '' : `　主持：${esc(ai(t.mod).name)}${t.modOutside ? '（未參與但收到內容）' : ''}`);
     let h = `<div class="turn"><div class="ask"><div class="bubble">${richQ(t.q)}</div><div class="meta">
-      ${solo ? '' : `<span class="chip">${M.name}</span><span class="chip">${t.rounds} 輪</span>`}${t.redact ? '<span class="chip">已開啟遮蔽</span>' : ''}<span>傳給：${who}</span> · ${when(t.at)}</div>
+      ${t.mode === 'relay' ? `<span class="chip">分工接力</span><span class="chip">${(t.stages || []).length} 棒</span>` : solo ? '' : `<span class="chip">${M.name}</span><span class="chip">${t.rounds} 輪</span>`}${t.branchBase ? `<span class="chip">分支起點：第 ${t.branchBase.round} ${t.mode === 'relay' ? '棒' : '輪'}</span>` : ''}${t.redact ? '<span class="chip">已開啟遮蔽</span>' : ''}<span>傳給：${who}</span> · ${when(t.at)}</div>
       ${t.quote ? `<blockquote class="small" style="margin:4px 0 0;max-width:min(720px,88%)">引用 ${esc(ai(t.quote.ai).name)}${t.quote.round ? ` 第 ${t.quote.round} 輪` : ''}：${esc(t.quote.text.slice(0, 160))}${t.quote.text.length > 160 ? '…' : ''}${t.quote.stepId ? ` <span class="lnk" data-goto="${esc(t.quote.stepId)}">跳到原文</span>` : ''}</blockquote>` : ''}
       ${t.brief ? `<div class="small">📋 ${esc(t.brief.template || '任務簡報')}：${Object.entries(t.brief.fields).filter(([, v]) => v).map(([k, v]) => `${esc((S.D.briefFields.find(f => f[0] === k) || [k, k])[1])} ${esc(v.slice(0, 40))}`).join('　')}</div>` : ''}
       ${(t.notes || []).length ? `<ul class="notes">${t.notes.map(n => `<li>補充${n.round ? `（第 ${n.round} 輪後）` : ''}：${esc(n.text)}</li>`).join('')}</ul>` : ''}</div>`;
     const answers = r => L.filter(s => s.kind === 'answer' && s.round === r && !busyIds.has(s.id) && s.status !== 'pending').sort((x, y) => t.ids.indexOf(x.ai) - t.ids.indexOf(y.ai));
-    if (solo) h += `<div class="grid" style="grid-template-columns:1fr">${answers(1).map(s => card(t, s)).join('')}${busy.map(busyCard).join('')}</div>`;
+    if (t.mode === 'relay') {
+      (t.stages || []).forEach((st, i) => {
+        const r = i + 1, cur = L.filter(s => s.kind === 'stage' && s.round === r && s.status !== 'pending' && !busyIds.has(s.id)).pop(), b = busy.find(x => x.kind === 'stage' && x.round === r);
+        const old = t.steps.filter(s => s.kind === 'stage' && s.round === r && s.superseded && s.status === 'ok');
+        if (!cur && !b) return;
+        h += `<details class="round" open><summary><span class="arr">›</span><b>第 ${r} 棒</b>${esc(st.role)}（${esc(ai(st.ai).name)}）${cur?.revision ? ' · 修改版' : ''}</summary>
+          <div class="grid" style="grid-template-columns:1fr">${b ? busyCard(b) : card(t, cur)}</div>
+          ${cur?.revision ? `<div class="small">修改意見：${esc(cur.revision.feedback)}</div>` : ''}
+          ${old.length ? `<details class="oldsum"><summary>先前版本（${old.length}）</summary>${old.map(o => card(t, o)).join('')}</details>` : ''}</details>`;
+      });
+    }
+    else if (solo) h += `<div class="grid" style="grid-template-columns:1fr">${answers(1).map(s => card(t, s)).join('')}${busy.map(busyCard).join('')}</div>`;
     else {
       const sum = L.filter(s => s.kind === 'summary').pop(), hasSum = sum && sum.status === 'ok';
       for (let r = 1; r <= t.rounds; r++) {

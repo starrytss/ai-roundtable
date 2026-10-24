@@ -1,7 +1,8 @@
 import { $, S, api, esc, ai, toast, copy, savePref, when, secs, P, tokenParam, STATUS } from './core.js';
 import { renderChat, chatMarkdown, texts, toggleExpand, rememberToggle, MODES } from './chat.js';
 import { renderComposer, bindComposer, autosize, refreshCheck, req, lastPreview, renderHL, renderExtras } from './composer.js';
-import { openPreview, openAISettings, saveAI, openSetup, bindSetup, openData, bindData, openFiles, bindProject, openBrief, bindBrief, openMem, bindMem, openAnalyze, bindAnalyze, bindMemList } from './dialogs.js';
+import { openRelay, bindRelay, openMaterials, bindMaterials, openOutput, bindOutput, openFiles, bindFiles, openDiff, bindDiff, branchFrom } from './phase3.js';
+import { openPreview, openAISettings, saveAI, openSetup, bindSetup, openData, bindData, bindProject, openBrief, bindBrief, openMem, bindMem, openAnalyze, bindAnalyze, bindMemList } from './dialogs.js';
 
 /* ---------- 載入與更新 ---------- */
 async function load() {
@@ -20,7 +21,7 @@ function renderSide() {
   $('#proj').innerHTML = S.D.projects.map(p => `<option value="${p.id}" ${p.id === S.pid ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
   const kw = $('#search').value.trim().toLowerCase(), list = ((P() || {}).chats || []).filter(c => !kw || (c.title || '').toLowerCase().includes(kw));
   $('#chats').innerHTML = list.map(c => `<li class="${c.id === S.cid ? 'on' : ''}" data-id="${c.id}">
-      <span class="t">${esc(c.title)}</span><span class="d" title="${esc(STATUS[c.status] || '')}">${['partial', 'failed', 'interrupted'].includes(c.status) ? '⚠ ' : ''}${when(c.updated)}</span>
+      <span class="t" title="${c.branchOf ? '分支自「' + esc(c.branchOf.title) + '」' : ''}">${c.branchOf ? '↳ ' : ''}${esc(c.title)}</span><span class="d" title="${esc(STATUS[c.status] || '')}">${['partial', 'failed', 'interrupted'].includes(c.status) ? '⚠ ' : ''}${when(c.updated)}</span>
       <span class="acts"><button data-ren="${c.id}" title="重新命名">✎</button><button data-del="${c.id}" title="刪除">✕</button></span></li>`).join('')
     || `<li class="small" style="cursor:default">${kw ? '找不到符合的對話' : '還沒有對話'}</li>`;
 }
@@ -99,7 +100,7 @@ async function act(url, body) {
   await tick();
 }
 $('#log').onclick = async e => {
-  const d = e.target.closest('[data-mem],[data-copysum],[data-more],[data-reask],[data-copytext],[data-exp],[data-mode],[data-retry],[data-retryall],[data-resum],[data-resume],[data-setup],[data-quote],[data-verify],[data-goto],[data-analyze],[data-iact]');
+  const d = e.target.closest('[data-mem],[data-copysum],[data-more],[data-reask],[data-copytext],[data-exp],[data-mode],[data-retry],[data-retryall],[data-resum],[data-resume],[data-setup],[data-quote],[data-verify],[data-goto],[data-analyze],[data-iact],[data-outfile],[data-cmp],[data-branch],[data-gochat]');
   if (!d) { document.body.classList.remove('side'); return; }
   const ds = d.dataset;
   if (ds.mode) { S.pref.mode = ds.mode; savePref(); renderComposer(); $('#q').value = ds.ex; autosize(); return $('#q').focus(); }
@@ -118,6 +119,10 @@ $('#log').onclick = async e => {
     el.animate([{ outline: '3px solid var(--gold)' }, { outline: '3px solid transparent' }], { duration: 1600 }); return;
   }
   if (ds.analyze) return openAnalyze(turnOf(ds.analyze));
+  if (ds.outfile) return openOutput(turnOf(ds.outfile));
+  if (ds.cmp) return openDiff();
+  if (ds.branch) return branchFrom(turnOf(ds.branch), load);
+  if (ds.gochat) { S.cid = ds.gochat; return load(); }
   if (ds.iact) {
     const box = d.closest('[data-intervene]');
     return act('/api/turn/intervene', { turnId: box.dataset.intervene, action: ds.iact, note: box.querySelector('[data-inote]').value, skip: [...box.querySelectorAll('[data-iskip]:checked')].map(x => x.dataset.iskip) });
@@ -189,7 +194,7 @@ $('#export').onclick = () => {
   a.download = S.chat.title.replace(/[\\/:*?"<>|]/g, '_') + '.md'; a.click();
 };
 $('#copyall').onclick = () => copy(chatMarkdown(), '已複製整段對話');
-$('#files').onclick = openFiles;
+$('#files').onclick = () => openFiles();
 $('#menu').onclick = () => document.body.classList.toggle('side');
 
 /* ---------- 對話框 ---------- */
@@ -199,7 +204,8 @@ $('#saveai').onclick = () => saveAI(true);
 $('#aicheck').onclick = () => { $('#dlgAI').close(); openSetup(); };
 $('#dataset').onclick = openData;
 bindSetup(load); bindData(load); bindProject(load); bindBrief(() => { renderExtras(); refreshCheck(); }); bindMem(load); bindAnalyze(tick); bindMemList(load);
-bindComposer({ onSend: sendQ, onPreview: () => openPreview(doSend), openAI: openAISettings, openBrief });
+bindComposer({ onSend: sendQ, onPreview: () => openPreview(doSend), openAI: openAISettings, openBrief, openRelay, openMaterials });
+bindRelay(); bindMaterials(); bindOutput(tick); bindFiles(); bindDiff(load);
 
 /* ---------- 深淺色 ---------- */
 function applyTheme() { document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); }
