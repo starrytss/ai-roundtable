@@ -1,7 +1,7 @@
 // 討論引擎：每位 AI、每一輪都是一個「步驟」，逐步存檔，可單獨重試、重開後續跑，結束時計算真實狀態
 const { uid } = require('./store');
-const { computeStatus, live } = require('./status');
-const { buildPayload } = require('./context');
+const { computeStatus, live, lastRound } = require('./status');
+const { buildPayload, readSources, BRIEF_FIELDS } = require('./context');
 const providers = require('./providers');
 const { run } = require('./runner');
 const { classify } = require('./errors');
@@ -39,7 +39,10 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const modOutside = !solo && !ids.includes(mod), allowOutside = req.modOutside === true;
     const rounds = solo ? 1 : Math.max(1, Math.min(4, req.rounds | 0 || 1));
     const include = {}; for (const k of SECTION_KEYS) if (typeof req.include?.[k] === 'boolean') include[k] = req.include[k];
-    return { q: String(req.q).trim(), ids, mod, modOutside, allowOutside, rounds, solo, mode: MODES.includes(req.mode) ? req.mode : 'discuss', include, redact: req.redact ?? S().privacy.redact };
+    const quote = req.quote && String(req.quote.text || '').trim() ? { text: String(req.quote.text).slice(0, 4000), ai: ais[req.quote.ai] ? req.quote.ai : null, round: req.quote.round | 0 || null, turnId: String(req.quote.turnId || '').slice(0, 40), stepId: String(req.quote.stepId || '').slice(0, 40) } : null;
+    const brief = req.brief && typeof req.brief.fields === 'object' ? { fields: Object.fromEntries(BRIEF_FIELDS.map(([k]) => [k, String(req.brief.fields[k] || '').slice(0, 2000)])), ask: (req.brief.ask || []).filter(k => BRIEF_FIELDS.some(([f]) => f === k)), template: String(req.brief.template || '').slice(0, 60) } : null;
+    return { q: String(req.q).trim(), ids, mod, modOutside, allowOutside, rounds, solo, mode: MODES.includes(req.mode) ? req.mode : 'discuss', include, redact: req.redact ?? S().privacy.redact,
+      pause: !!req.pause && !solo && rounds > 1, quote, brief };
   }
   function recipients(n) {
     const list = n.ids.map(id => ({ ai: id, roles: ['participant'] }));
@@ -64,7 +67,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const n = normalize(req), { p, c } = find(req.pid, req.cid);
     if (!p) throw err('input', '找不到專案');
     const est = estimate(n);
-    const turn = { id: 'preview', q: n.q, mode: n.mode, ids: n.ids, rounds: n.rounds, steps: [], notes: [] };
+    const turn = { id: 'preview', q: n.q, mode: n.mode, ids: n.ids, rounds: n.rounds, steps: [], notes: [], quote: n.quote, brief: n.brief };
     const table = new Map(), budget = S().limits.budgetChars, sk = skills();
     const per = recipients(n).map(r => {
       const ai = S().ais[r.ai], base = { project: p, chat: c || { turns: [] }, turn, ai, aiId: r.ai, names: names(), include: n.include, redact: n.redact, table, budget, skills: sk };
@@ -95,7 +98,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
           onChange();
         });
       } else {
-        const inv = providers.invocation(ai, { workdir: ctx.workdir, reduceTraffic: S().privacy.reduceTraffic });
+        const inv = providers.invocation(step.kind === 'analysis' ? { ...ai, level: 'text' } : ai, { workdir: ctx.workdir, reduceTraffic: S().privacy.reduceTraffic });   // 查核整理只看文字，不開工具
         if (inv.missing) throw err('missing', `找不到程式 ${inv.missing}`);
         const r = await runCli(inv, payload.prompt, { cwd: ctx.workdir, timeoutMs: S().limits.timeoutMin * 60000, signal: active.ac.signal,
           onEvent: ev => { if (ev.type !== 'text') { busy.events.push(ev); if (busy.events.length > 60) busy.events.shift(); } busy.last = ev; onChange(); } });
@@ -114,6 +117,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
 
   async function runPending(ctx) {
     const { t } = ctx, aborted = () => active.ac.signal.aborted;
+    t.waitingAfter = null;
     const rounds = [...new Set(live(t).filter(s => s.status === 'pending' && s.kind === 'answer').map(s => s.round))].sort((a, b) => a - b);
     for (const r of rounds) {
       if (aborted()) break;
@@ -122,13 +126,17 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
       const a = Promise.all(autos.map(s => execStep(ctx, s)));   // 自動的同時進行，手動的依序貼上
       for (const s of manuals) { if (aborted()) break; await execStep(ctx, s); }
       await a;
+      // 每輪後暫停：還有後續輪次或總結時停下來，等使用者補充、略過或決定直接總結
+      if (t.pause && !aborted() && live(t).some(s => s.status === 'pending')) { t.waitingAfter = r; return; }
     }
     const sum = live(t).find(s => s.kind === 'summary' && s.status === 'pending');
     if (sum && !aborted()) {
-      const okLast = live(t).some(s => s.kind === 'answer' && s.round === t.rounds && s.status === 'ok');
+      const okLast = live(t).some(s => s.kind === 'answer' && !s.userSkipped && s.round === lastRound(t) && s.status === 'ok');
       if (okLast) await execStep(ctx, sum);
       else Object.assign(sum, { status: 'skipped', error: { kind: 'skipped', text: '最後一輪沒有成功的回答，主持人沒有內容可以整理。' } });
     }
+    const an = live(t).find(s => s.kind === 'analysis' && s.status === 'pending');
+    if (an && !aborted()) { await execStep(ctx, an); if (an.status === 'ok') t.analysis = parseAnalysis(an.text, t, names()); }
   }
 
   function finish(ctx) {
@@ -157,7 +165,8 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const { p, c } = find(req.pid, req.cid);
     if (!c) throw err('input', '找不到對話');
     const t = { id: uid(), q: n.q, at: Date.now(), mode: n.mode, rounds: n.rounds, ids: n.ids, mod: n.mod, modOutside: n.modOutside,
-      include: n.include, redact: n.redact, notes: [], steps: [], levels: Object.fromEntries(recipients(n).map(r => [r.ai, r.mode === 'manual' ? 'manual' : r.level])) };
+      include: n.include, redact: n.redact, notes: [], steps: [], pause: n.pause, quote: n.quote, brief: n.brief,
+      levels: Object.fromEntries(recipients(n).map(r => [r.ai, r.mode === 'manual' ? 'manual' : r.level])) };
     for (let r = 1; r <= n.rounds; r++) for (const id of n.ids) t.steps.push({ id: uid(), kind: 'answer', round: r, ai: id, status: 'pending', attempts: 0 });
     if (!n.solo) t.steps.push({ id: uid(), kind: 'summary', round: null, ai: n.mod, status: 'pending', attempts: 0 });
     if (!c.turns.length) c.title = n.q.slice(0, 24);
@@ -215,6 +224,33 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     return launch({ p, c, t });
   }
 
+  // 每輪後介入：補充指示、略過下一輪的某位 AI、繼續、改成自動跑完、直接總結或停在這裡
+  function intervene({ pid, cid, turnId, note, skip = [], action = 'continue' }) {
+    const { p, c, t } = find(pid, cid, turnId);
+    if (!t || t.status !== 'waiting' || active) throw err('input', '這場討論目前不在等待你介入的狀態');
+    const after = t.waitingAfter;
+    if (String(note || '').trim()) t.notes.push({ round: after, text: String(note).trim().slice(0, 4000), at: Date.now() });
+    const userSkip = s => Object.assign(s, { status: 'skipped', userSkipped: true, error: { kind: 'skipped', text: '你選擇略過' } });
+    for (const s of live(t)) if (s.status === 'pending' && s.kind === 'answer' && s.round === after + 1 && skip.includes(s.ai)) userSkip(s);
+    if (action === 'summarize' || action === 'stop') for (const s of live(t)) if (s.status === 'pending' && s.kind === 'answer') userSkip(s);
+    if (action === 'stop') { for (const s of live(t)) if (s.status === 'pending') userSkip(s); t.stopped = true; t.waitingAfter = null; Object.assign(t, computeStatus(t)); store.save(); onChange(); return { turnId: t.id, done: Promise.resolve() }; }
+    if (action === 'auto') t.pause = false;
+    return launch({ p, c, t });
+  }
+
+  // 共識、分歧與證據整理：由指定的 AI 只讀文字整理成 JSON，本程式再用實際讀取紀錄核對「有來源支持」
+  function analyze({ pid, cid, turnId, ai, allowOutside = false }) {
+    const { p, c, t } = find(pid, cid, turnId);
+    if (!t) throw err('input', '找不到這次討論');
+    if (!S().ais[ai]) throw err('input', '請選擇負責整理的 AI');
+    if (!t.ids.includes(ai) && !allowOutside) throw err('moderator', `${S().ais[ai].name} 沒有參與這場討論，整理時會收到所有 AI 的發言。請改選參與者，或明確同意。`, { ai });
+    if (providers.needsAck(S().ais[ai])) throw err('ack', `${S().ais[ai].name} 需要先在 AI 設定確認權限風險`, { ai });
+    if (!live(t).some(s => s.kind === 'answer' && s.status === 'ok')) throw err('input', '還沒有成功的回答可以整理');
+    const old = live(t).find(s => s.kind === 'analysis'); if (old) old.superseded = true;
+    t.steps.push({ id: uid(), kind: 'analysis', round: null, ai, status: 'pending', attempts: 0 });
+    return launch({ p, c, t });
+  }
+
   function stop() {
     if (!active) return false;
     active.ac.abort();
@@ -235,7 +271,28 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
       manual: [...active.manual].map(([id, m]) => ({ stepId: id, ai: m.ai, round: m.round, kind: m.kind, prompt: m.prompt, pid: m.pid, cid: m.cid })) };
   }
 
-  return { preview, start, retry, resume, more, stop, manual, state, recipients: req => recipients(normalize(req)), get busy() { return !!active; } };
+  return { preview, start, retry, resume, more, stop, manual, state, intervene, analyze, recipients: req => recipients(normalize(req)), get busy() { return !!active; } };
 }
 
-module.exports = { createEngine };
+// 解析整理結果；「有來源支持」必須至少有一個來源真的出現在 CLI 讀取紀錄裡，否則降為「有引用、無讀取紀錄」
+const CLAIM = ['supported', 'inference', 'conflict', 'unverified'];
+function parseAnalysis(text, turn, names = {}) {
+  const raw = (String(text).match(/```(?:json)?\s*([\s\S]*?)```/) || [])[1] || String(text);
+  let j; try { j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)); } catch { return { error: '整理結果不是有效的 JSON，請看原文。', raw: String(text).slice(0, 4000) }; }
+  const read = new Set(readSources(turn).map(x => normUrl(x.url))), arr = v => (Array.isArray(v) ? v : []), str = v => String(v ?? '').slice(0, 1000);
+  const claims = arr(j.claims).slice(0, 40).map(c => {
+    const sources = arr(c.sources).map(str).filter(u => /^https?:\/\//.test(u)).slice(0, 8);
+    const readHits = sources.filter(u => read.has(normUrl(u)));
+    let status = CLAIM.includes(c.status) ? c.status : 'unverified', check = '';
+    if (status === 'supported' && !readHits.length) { status = 'cited'; check = sources.length ? '有引用網址，但本程式沒有看到任何 AI 讀取這些網址的紀錄' : '沒有附來源'; }
+    return { claim: str(c.claim), by: arr(c.by).map(str).slice(0, 6), sources, readHits, status, note: str(c.note), check };
+  });
+  return {
+    consensus: arr(j.consensus).slice(0, 30).map(x => ({ point: str(x.point), by: arr(x.by).map(str).slice(0, 6), reason: str(x.reason) })),
+    disagreements: arr(j.disagreements).slice(0, 30).map(x => ({ point: str(x.point), positions: arr(x.positions).slice(0, 6).map(y => ({ by: str(y.by), stance: str(y.stance), reason: str(y.reason) })) })),
+    claims, toVerify: arr(j.toVerify).map(str).slice(0, 30), toDecide: arr(j.toDecide).map(str).slice(0, 30), sources: readSources(turn), at: Date.now(),
+  };
+}
+const normUrl = u => { try { const x = new URL(u); return (x.host + x.pathname).replace(/\/$/, '').toLowerCase(); } catch { return String(u); } };
+
+module.exports = { createEngine, parseAnalysis };

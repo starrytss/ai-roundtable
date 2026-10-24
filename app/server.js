@@ -9,6 +9,15 @@ const providers = require('./lib/providers');
 const diagnose = require('./lib/diagnose');
 const sec = require('./lib/security');
 const { workdirFor, resolveInside, listFiles } = require('./lib/workspace');
+const { BRIEF_FIELDS, MEM_LABEL } = require('./lib/context');
+
+const MEM_TYPES = Object.keys(MEM_LABEL);
+// 常用的任務簡報範本（使用者可另存自己的版本）
+const defaultBriefs = () => [
+  { name: '活動企劃', fields: { goal: '', audience: '', budget: '', timeline: '', constraints: '', format: '活動提案：目標、流程、預算表、風險與備案' }, ask: ['goal', 'audience', 'budget', 'timeline'] },
+  { name: '網站開發', fields: { goal: '', audience: '', budget: '', timeline: '', constraints: '', format: '需求清單、頁面架構、技術選擇與驗收條件' }, ask: ['goal', 'audience', 'timeline', 'constraints'] },
+  { name: '供應商比較', fields: { goal: '', audience: '', budget: '', timeline: '', constraints: '', format: '比較表：價格、條件、風險，最後給建議' }, ask: ['goal', 'budget', 'constraints'] },
+];
 
 const VERSION = '1.1.0';
 const ROOT = path.resolve(__dirname, '..'), UI = path.join(__dirname, 'ui');
@@ -99,7 +108,8 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
     const ais = Object.fromEntries(Object.entries(s.ais).map(([k, a]) => [k, { ...a, guarantee: a.mode === 'manual' ? null : providers.guarantee(a), needsAck: providers.needsAck(a),
       records: (providers.PROVIDERS[a.provider] || {}).records || [], untested: !!(providers.PROVIDERS[a.provider] || {}).untested, argvPrompt: !!(providers.PROVIDERS[a.provider] || {}).argvPrompt }]));
     return {
-      version: VERSION, settings: { ...s, ais }, levels: providers.LEVELS.map(k => ({ key: k, label: providers.LEVEL_LABEL[k] })),
+      version: VERSION, settings: { ...s, ais, briefTemplates: s.briefTemplates || defaultBriefs() }, levels: providers.LEVELS.map(k => ({ key: k, label: providers.LEVEL_LABEL[k] })),
+      briefFields: BRIEF_FIELDS, memLabels: MEM_LABEL,
       projects: db().projects.map(p => ({ ...p, chats: p.chats.map(c => ({ id: c.id, title: c.title, updated: c.updated, status: (c.turns.at(-1) || {}).status })).sort((a, b) => b.updated - a.updated) })),
       privacy: { ...store.state, dataDir: paths.dataDir, workRoot: paths.workRoot, backups: store.listBackups().length },
       run: engine.state(),
@@ -122,7 +132,32 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
         if (engine.state()?.cid === b.cid) throw new Error('這個對話正在討論中');
         if (p) { p.chats = p.chats.filter(c => c.id !== b.cid); store.save(); } return;
       case '/api/chat/rename': { const c = findC(p, b.cid); if (c && String(b.title || '').trim()) { c.title = String(b.title).trim().slice(0, 60); store.save(); } return; }
-      case '/api/memory/add': if (p && b.text) { p.memory = (p.memory ? p.memory + '\n\n' : '') + String(b.text); store.save(); } return;
+      case '/api/memory/add': {
+        if (!p || !String(b.text || '').trim()) throw new Error('沒有要加入的內容');
+        if (!MEM_TYPES.includes(b.type)) { p.memory = (p.memory ? p.memory + '\n\n' : '') + String(b.text); store.save(); return; }
+        const src = b.source || {}, c = findC(p, src.cid);
+        p.memories.push({ id: uid(), type: b.type, text: String(b.text).trim().slice(0, 4000), status: 'active', date: new Date().toISOString().slice(0, 10), at: Date.now(),
+          source: { cid: c?.id || null, chat: c?.title || '', turnId: String(src.turnId || '').slice(0, 40), ai: String(src.ai || '').slice(0, 20) } });
+        store.save(); return { memories: p.memories };
+      }
+      case '/api/memory/update': {
+        const m = p && p.memories.find(x => x.id === b.id); if (!m) throw new Error('找不到這筆記憶');
+        if (b.replace) {   // 取代：保留舊的並標為已取代，新增一筆記錄取代關係
+          m.status = 'replaced';
+          p.memories.push({ ...m, id: uid(), text: String(b.text || m.text).trim().slice(0, 4000), type: MEM_TYPES.includes(b.type) ? b.type : m.type, status: 'active', replaces: m.id, date: new Date().toISOString().slice(0, 10), at: Date.now() });
+        } else { if (typeof b.text === 'string') m.text = b.text.trim().slice(0, 4000); if (MEM_TYPES.includes(b.type)) m.type = b.type; m.updatedAt = Date.now(); }
+        store.save(); return { memories: p.memories };
+      }
+      case '/api/memory/delete': if (p) { p.memories = p.memories.filter(x => x.id !== b.id); store.save(); } return { memories: p ? p.memories : [] };
+      case '/api/briefs/save': {
+        const name = String(b.name || '').trim().slice(0, 40); if (!name) throw new Error('請輸入範本名稱');
+        S.briefTemplates = (S.briefTemplates || defaultBriefs()).filter(x => x.name !== name);
+        S.briefTemplates.push({ name, fields: Object.fromEntries(BRIEF_FIELDS.map(([k]) => [k, String(b.fields?.[k] || '').slice(0, 2000)])), ask: (b.ask || []).filter(k => BRIEF_FIELDS.some(([f]) => f === k)) });
+        store.save(); return { briefTemplates: S.briefTemplates };
+      }
+      case '/api/briefs/delete': S.briefTemplates = (S.briefTemplates || defaultBriefs()).filter(x => x.name !== b.name); store.save(); return { briefTemplates: S.briefTemplates };
+      case '/api/turn/intervene': { const r = engine.intervene(b); return { turnId: r.turnId }; }
+      case '/api/turn/analyze': { const r = engine.analyze(b); return { turnId: r.turnId }; }
 
       case '/api/settings': {
         for (const [k, v] of Object.entries(b.ais || {})) {

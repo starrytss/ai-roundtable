@@ -118,3 +118,36 @@ test('a stale or foreign lock never identifies another program as the app', asyn
   assert.deepEqual(await sec.stopRunning(path.join(dir, 'instance.lock')), { stopped: false, reason: 'none' });
   other.close();
 });
+
+test('structured memory: add with source, replace keeps history, delete; grouped labels reach the AI', async () => {
+  const s = await boot();
+  try {
+    const pid = (await s.api('/api/state')).json.projects[0].id;
+    const cid = (await s.api('/api/chat/new', { pid })).json.id;
+    let m = (await s.api('/api/memory/add', { pid, type: 'decision', text: '採用方案 A', source: { cid, turnId: 't1', ai: 'claude' } })).json.memories;
+    assert.equal(m[0].source.cid, cid); assert.match(m[0].date, /^\d{4}-\d{2}-\d{2}$/);
+    m = (await s.api('/api/memory/add', { pid, type: 'rejected', text: '方案 C 太貴' })).json.memories;
+    m = (await s.api('/api/memory/update', { pid, id: m[0].id, text: '採用方案 B', replace: true })).json.memories;
+    assert.equal(m.find(x => x.text === '採用方案 A').status, 'replaced');
+    assert.equal(m.find(x => x.text === '採用方案 B').replaces, m.find(x => x.text === '採用方案 A').id);
+    const pv = (await s.api('/api/preview', { pid, cid, q: 'x', ids: ['claude'] })).json;
+    const mem = pv.recipients[0].answer.sections.find(x => x.key === 'memory').preview;
+    assert.match(mem, /已確認的決策：\n- 採用方案 B/); assert.ok(!mem.includes('採用方案 A'));
+    assert.match(mem, /未採用的建議/);
+    m = (await s.api('/api/memory/delete', { pid, id: m.find(x => x.text === '方案 C 太貴').id })).json.memories;
+    assert.ok(!m.some(x => x.text === '方案 C 太貴'));
+    assert.match((await s.api('/api/memory/add', { pid, type: 'decision', text: '  ' })).json.error, /沒有要加入/);
+  } finally { s.quit(); }
+});
+
+test('brief templates: defaults are offered, a saved template replaces one with the same name', async () => {
+  const s = await boot();
+  try {
+    const st = (await s.api('/api/state')).json;
+    assert.ok(st.settings.briefTemplates.some(t => t.name === '活動企劃'));
+    const r = (await s.api('/api/briefs/save', { name: '我的範本', fields: { goal: 'G', evil: 'x' }, ask: ['goal', 'nope'] })).json;
+    const t = r.briefTemplates.find(x => x.name === '我的範本');
+    assert.equal(t.fields.goal, 'G'); assert.ok(!('evil' in t.fields)); assert.deepEqual(t.ask, ['goal']);
+    assert.ok(!(await s.api('/api/briefs/delete', { name: '我的範本' })).json.briefTemplates.some(x => x.name === '我的範本'));
+  } finally { s.quit(); }
+});

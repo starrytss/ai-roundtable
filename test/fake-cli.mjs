@@ -16,11 +16,11 @@ function main() {
   let prompt = input;
   if (provider === 'gemini') { try { prompt = JSON.parse(input.trim()).message.content; } catch {} }
   if (args.includes('{prompt}')) prompt = '';
-  const round = /你是主持人/.test(prompt) ? 'sum' : (prompt.match(/目前是第 (\d+) 輪/) || [])[1] || '1';
+  const round = /你是查核整理員/.test(prompt) ? 'analysis' : /你是主持人/.test(prompt) ? 'sum' : (prompt.match(/目前是第 (\d+) 輪/) || [])[1] || '1';
   const who = process.env.RT_FAKE_AS || provider;
   const rule = rules[`${who}@${round}`] || rules[who] || 'ok';
   if (process.env.RT_FAKE_LOG) fs.appendFileSync(process.env.RT_FAKE_LOG, JSON.stringify({ provider: who, round, args, stdin: prompt, cwd: process.cwd(), at: Date.now() }) + '\n');
-  const answer = `${who} 第${round}輪的回答`;
+  const answer = round === 'analysis' ? ANALYSIS : `${who} 第${round}輪的回答`;
   if (rule === 'hang') return setTimeout(() => {}, 1e9);
   if (rule === 'slow') return setTimeout(() => emit(answer), 1500);
   if (rule === 'login') { process.stderr.write('Error: Not logged in. Please log in.'); process.exit(1); }
@@ -36,6 +36,8 @@ function emit(text) {
     out({ type: 'system', subtype: 'init', tools: [] });
     out({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'WebSearch', input: { query: 'fake query' } }] } });
     out({ type: 'user', message: { content: [{ type: 'tool_result' }] } });
+    out({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'WebFetch', input: { url: 'https://example.com/read' } }] } });
+    out({ type: 'user', message: { content: [{ type: 'tool_result' }] } });
     out({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
     out({ type: 'result', subtype: 'success', result: text, usage: { output_tokens: 5 } });
   } else if (provider === 'codex') {
@@ -46,3 +48,6 @@ function emit(text) {
   } else process.stdout.write(text);
   process.exit(0);
 }
+
+// 查核整理的模擬回覆：一個主張有讀取紀錄、一個只有引用網址、一個是推論
+const ANALYSIS = '整理如下\n```json\n' + JSON.stringify({ consensus: [{ point: '都建議 A', by: ['Claude', 'Gemini'], reason: '成本低' }], disagreements: [{ point: '時程', positions: [{ by: 'Claude', stance: '一個月', reason: '' }, { by: 'Gemini', stance: '兩個月', reason: '' }] }], claims: [{ claim: '有讀取來源的主張', sources: ['https://example.com/read'], status: 'supported' }, { claim: '只有引用的主張', sources: ['https://example.com/unread'], status: 'supported' }, { claim: '推論', status: 'inference' }], toVerify: ['價格'], toDecide: ['選 A 或 B'] }) + '\n```';
