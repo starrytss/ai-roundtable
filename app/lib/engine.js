@@ -5,10 +5,13 @@ const { buildPayload, readSources, BRIEF_FIELDS } = require('./context');
 const providers = require('./providers');
 const { run } = require('./runner');
 const { classify } = require('./errors');
-const { workdirFor } = require('./workspace');
+const { workdirFor, resolveInside } = require('./workspace');
+const { OUTPUT_TEMPLATES } = require('./outputs');
+const fs = require('fs'), path = require('path');
 
-const MODES = ['discuss', 'debate', 'brainstorm', 'review'];
-const SECTION_KEYS = ['instructions', 'memory', 'history', 'skills', 'references', 'others'];
+const MODES = ['discuss', 'debate', 'brainstorm', 'review', 'relay'];
+const SECTION_KEYS = ['instructions', 'materials', 'memory', 'history', 'skills', 'references', 'others'];
+const INPUTS = ['previous', 'all', 'question'];
 const err = (code, text, extra = {}) => Object.assign(new Error(text), { code, ...extra });
 
 function createEngine({ store, skills = () => [], runCli = run, onChange = () => {} }) {
@@ -31,26 +34,33 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
 
   // ---------- 送出前檢查：參與者、主持人、確認、呼叫次數 ----------
   function normalize(req) {
-    const ais = S().ais, ids = [...new Set((req.ids || []).filter(i => ais[i]))];
+    const ais = S().ais, relay = req.mode === 'relay';
+    // 分工接力：每一棒有職務、負責的 AI、任務、驗收條件與要交接的內容；同一家 AI 可以擔任不同職務
+    const stages = relay ? (req.stages || []).slice(0, 8).filter(x => x && ais[x.ai]).map(x => ({ role: String(x.role || '').trim().slice(0, 40) || '負責人', ai: x.ai,
+      task: String(x.task || '').slice(0, 2000), accept: String(x.accept || '').slice(0, 1000), input: INPUTS.includes(x.input) ? x.input : 'previous' })) : null;
+    if (relay && !stages.length) throw err('input', '分工接力至少需要一棒');
+    const ids = relay ? [...new Set(stages.map(x => x.ai))] : [...new Set((req.ids || []).filter(i => ais[i]))];
     if (!String(req.q || '').trim()) throw err('input', '請輸入問題');
     if (!ids.length) throw err('input', '請至少選一個 AI');
-    const solo = ids.length === 1;
-    const mod = solo ? ids[0] : (ais[req.mod] ? req.mod : ids[0]);
-    const modOutside = !solo && !ids.includes(mod), allowOutside = req.modOutside === true;
-    const rounds = solo ? 1 : Math.max(1, Math.min(4, req.rounds | 0 || 1));
+    const solo = !relay && ids.length === 1;
+    const mod = solo || relay ? ids[0] : (ais[req.mod] ? req.mod : ids[0]);
+    const modOutside = !solo && !relay && !ids.includes(mod), allowOutside = req.modOutside === true;
+    const rounds = relay ? stages.length : solo ? 1 : Math.max(1, Math.min(4, req.rounds | 0 || 1));
     const include = {}; for (const k of SECTION_KEYS) if (typeof req.include?.[k] === 'boolean') include[k] = req.include[k];
     const quote = req.quote && String(req.quote.text || '').trim() ? { text: String(req.quote.text).slice(0, 4000), ai: ais[req.quote.ai] ? req.quote.ai : null, round: req.quote.round | 0 || null, turnId: String(req.quote.turnId || '').slice(0, 40), stepId: String(req.quote.stepId || '').slice(0, 40) } : null;
     const brief = req.brief && typeof req.brief.fields === 'object' ? { fields: Object.fromEntries(BRIEF_FIELDS.map(([k]) => [k, String(req.brief.fields[k] || '').slice(0, 2000)])), ask: (req.brief.ask || []).filter(k => BRIEF_FIELDS.some(([f]) => f === k)), template: String(req.brief.template || '').slice(0, 60) } : null;
     return { q: String(req.q).trim(), ids, mod, modOutside, allowOutside, rounds, solo, mode: MODES.includes(req.mode) ? req.mode : 'discuss', include, redact: req.redact ?? S().privacy.redact,
-      pause: !!req.pause && !solo && rounds > 1, quote, brief };
+      pause: relay ? req.review !== false : !!req.pause && !solo && rounds > 1, quote, brief, relay, stages,
+      outputTemplate: OUTPUT_TEMPLATES[req.outputTemplate] ? req.outputTemplate : '', materials: Array.isArray(req.materials) ? req.materials.map(String).slice(0, 50) : null };
   }
   function recipients(n) {
-    const list = n.ids.map(id => ({ ai: id, roles: ['participant'] }));
-    if (!n.solo) { const m = list.find(x => x.ai === n.mod); if (m) m.roles.push('moderator'); else list.push({ ai: n.mod, roles: ['moderator'], outside: true }); }
+    const list = n.ids.map(id => ({ ai: id, roles: n.relay ? ['stage'] : ['participant'], stages: n.relay ? n.stages.map((x, i) => ({ ...x, n: i + 1 })).filter(x => x.ai === id).map(x => `第 ${x.n} 棒：${x.role}`) : undefined }));
+    if (!n.solo && !n.relay) { const m = list.find(x => x.ai === n.mod); if (m) m.roles.push('moderator'); else list.push({ ai: n.mod, roles: ['moderator'], outside: true }); }
     return list.map(r => { const a = S().ais[r.ai]; return { ...r, name: a.name, mode: a.mode, level: a.level, guarantee: a.mode === 'manual' ? { level: 'manual', notes: ['手動貼上：由你自己複製到它的網站'] } : providers.guarantee(a), needsAck: providers.needsAck(a) }; });
   }
   function estimate(n, extraRounds = 0) {
     const auto = id => S().ais[id].mode === 'auto';
+    if (n.relay) { const a = n.stages.filter(x => auto(x.ai)).length; return { total: n.stages.length, auto: a, manual: n.stages.length - a, max: S().limits.maxCalls, note: 'CLI 呼叫次數，不含退回修改；不等於模型推論次數或費用' }; }
     const answers = n.ids.length * (n.rounds + extraRounds), sum = n.solo ? 0 : 1;
     const autoCalls = n.ids.filter(auto).length * (n.rounds + extraRounds) + (sum && auto(n.mod) ? 1 : 0);
     return { total: answers + sum, auto: autoCalls, manual: answers + sum - autoCalls, max: S().limits.maxCalls,
@@ -67,11 +77,12 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const n = normalize(req), { p, c } = find(req.pid, req.cid);
     if (!p) throw err('input', '找不到專案');
     const est = estimate(n);
-    const turn = { id: 'preview', q: n.q, mode: n.mode, ids: n.ids, rounds: n.rounds, steps: [], notes: [], quote: n.quote, brief: n.brief };
+    const turn = { id: 'preview', q: n.q, mode: n.mode, ids: n.ids, rounds: n.rounds, steps: [], notes: [], quote: n.quote, brief: n.brief, stages: n.stages, outputTemplate: n.outputTemplate, materials: n.materials };
     const table = new Map(), budget = S().limits.budgetChars, sk = skills();
     const per = recipients(n).map(r => {
       const ai = S().ais[r.ai], base = { project: p, chat: c || { turns: [] }, turn, ai, aiId: r.ai, names: names(), include: n.include, redact: n.redact, table, budget, skills: sk };
-      const answer = r.roles.includes('participant') ? buildPayload({ ...base, round: 1 }) : null;
+      const answer = r.roles.includes('stage') ? buildPayload({ ...base, kind: 'stage', round: n.stages.findIndex(x => x.ai === r.ai) + 1 })
+        : r.roles.includes('participant') ? buildPayload({ ...base, round: 1 }) : null;
       const summary = r.roles.includes('moderator') ? buildPayload({ ...base, kind: 'summary' }) : null;
       const inv = ai.mode === 'auto' ? providers.invocation(ai, { workdir: '.' }) : null;
       return { ...r, answer, summary, argvPrompt: !!inv?.argvPrompt, missing: inv?.missing || null };
@@ -83,7 +94,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
   // ---------- 執行 ----------
   async function execStep(ctx, step) {
     const { p, c, t } = ctx, ai = S().ais[step.ai];
-    const payload = buildPayload({ project: p, chat: c, turn: t, ai, aiId: step.ai, names: names(), round: step.round, kind: step.kind,
+    const payload = buildPayload({ project: p, chat: c, turn: t, ai, aiId: step.ai, names: names(), round: step.round, kind: step.kind, step,
       include: t.include, redact: t.redact, table: ctx.table, budget: S().limits.budgetChars, skills: skills() });
     Object.assign(step, { status: 'running', startedAt: Date.now(), sentChars: payload.chars, omitted: payload.omitted, masked: payload.findings.length, attempts: (step.attempts || 0) + 1, error: null });
     t.maskTable = [...ctx.table];
@@ -118,6 +129,15 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
   async function runPending(ctx) {
     const { t } = ctx, aborted = () => active.ac.signal.aborted;
     t.waitingAfter = null;
+    if (t.mode === 'relay') {   // 一棒接一棒依序執行，不會有兩位 AI 同時改同一份檔案
+      for (;;) {
+        const s = live(t).filter(x => x.kind === 'stage' && x.status === 'pending').sort((a, b) => a.round - b.round)[0];
+        if (!s || aborted()) return;
+        await execStep(ctx, s);
+        if (s.status !== 'ok') { t.waitingAfter = s.round; return; }   // 失敗就停下，等使用者重試或結束
+        if (t.pause && live(t).some(x => x.status === 'pending')) { t.waitingAfter = s.round; return; }   // 驗收
+      }
+    }
     const rounds = [...new Set(live(t).filter(s => s.status === 'pending' && s.kind === 'answer').map(s => s.round))].sort((a, b) => a - b);
     for (const r of rounds) {
       if (aborted()) break;
@@ -145,7 +165,8 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     Object.assign(t, computeStatus(t));
     const sum = live(t).filter(s => s.kind === 'summary' && s.status === 'ok').pop();
     const solo = live(t).filter(s => s.kind === 'answer' && s.status === 'ok').pop();
-    t.summary = t.ids.length > 1 ? (sum ? sum.text : '') : (solo ? solo.text : '');
+    const lastStage = live(t).filter(s => s.kind === 'stage' && s.status === 'ok').sort((a, b) => a.round - b.round).pop();
+    t.summary = t.mode === 'relay' ? (t.status === 'done' && lastStage ? lastStage.text : '') : t.ids.length > 1 ? (sum ? sum.text : '') : (solo ? solo.text : '');
     t.finishedAt = Date.now();
   }
 
@@ -155,6 +176,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     ctx.t.status = 'running'; ctx.t.stopped = false; ctx.t.reasons = [];
     ctx.workdir = workdirFor(store.paths.workRoot, ctx.p.id, ctx.c.id);
     ctx.table = new Map(ctx.t.maskTable || []);
+    copyMaterials(ctx);
     store.save(); onChange();
     const done = runPending(ctx).catch(e => { ctx.t.engineError = e.message; }).finally(() => { finish(ctx); active = null; store.save(); onChange(); });
     return { turnId: ctx.t.id, done };
@@ -165,10 +187,11 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const { p, c } = find(req.pid, req.cid);
     if (!c) throw err('input', '找不到對話');
     const t = { id: uid(), q: n.q, at: Date.now(), mode: n.mode, rounds: n.rounds, ids: n.ids, mod: n.mod, modOutside: n.modOutside,
-      include: n.include, redact: n.redact, notes: [], steps: [], pause: n.pause, quote: n.quote, brief: n.brief,
+      include: n.include, redact: n.redact, notes: [], steps: [], pause: n.pause, quote: n.quote, brief: n.brief, stages: n.stages || undefined, outputTemplate: n.outputTemplate, materials: n.materials,
       levels: Object.fromEntries(recipients(n).map(r => [r.ai, r.mode === 'manual' ? 'manual' : r.level])) };
-    for (let r = 1; r <= n.rounds; r++) for (const id of n.ids) t.steps.push({ id: uid(), kind: 'answer', round: r, ai: id, status: 'pending', attempts: 0 });
-    if (!n.solo) t.steps.push({ id: uid(), kind: 'summary', round: null, ai: n.mod, status: 'pending', attempts: 0 });
+    if (n.relay) n.stages.forEach((x, i) => t.steps.push({ id: uid(), kind: 'stage', round: i + 1, ai: x.ai, status: 'pending', attempts: 0 }));
+    else for (let r = 1; r <= n.rounds; r++) for (const id of n.ids) t.steps.push({ id: uid(), kind: 'answer', round: r, ai: id, status: 'pending', attempts: 0 });
+    if (!n.solo && !n.relay) t.steps.push({ id: uid(), kind: 'summary', round: null, ai: n.mod, status: 'pending', attempts: 0 });
     if (!c.turns.length) c.title = n.q.slice(0, 24);
     c.turns.push(t);
     return launch({ p, c, t });
@@ -181,13 +204,13 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const max = S().limits.maxRetries + 1;
     for (const id of stepIds) {
       const s = t.steps.find(x => x.id === id && !x.superseded);
-      if (!s || s.kind !== 'answer' || !['error', 'stopped', 'interrupted', 'skipped'].includes(s.status)) continue;
+      if (!s || !['answer', 'stage'].includes(s.kind) || !['error', 'stopped', 'interrupted', 'skipped'].includes(s.status)) continue;
       if ((s.attempts || 0) >= max) throw err('limit', `${S().ais[s.ai]?.name || s.ai} 第 ${s.round} 輪已重試 ${s.attempts} 次，達到上限。`);
       s.superseded = true;
-      t.steps.push({ id: uid(), kind: 'answer', round: s.round, ai: s.ai, status: 'pending', attempts: s.attempts || 0, retryOf: s.id });
+      t.steps.push({ id: uid(), kind: s.kind, round: s.round, ai: s.ai, status: 'pending', attempts: s.attempts || 0, retryOf: s.id });
       for (const later of live(t)) if (later.kind === 'answer' && later.round > s.round && later.status === 'ok') later.stale = true;
     }
-    if (summary || stepIds.length) {
+    if ((summary || stepIds.length) && t.mode !== 'relay') {
       if (t.ids.length > 1) {
         const old = live(t).filter(x => x.kind === 'summary').pop();
         let m = mod || old?.ai || t.mod;
@@ -234,8 +257,25 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     for (const s of live(t)) if (s.status === 'pending' && s.kind === 'answer' && s.round === after + 1 && skip.includes(s.ai)) userSkip(s);
     if (action === 'summarize' || action === 'stop') for (const s of live(t)) if (s.status === 'pending' && s.kind === 'answer') userSkip(s);
     if (action === 'stop') { for (const s of live(t)) if (s.status === 'pending') userSkip(s); t.stopped = true; t.waitingAfter = null; Object.assign(t, computeStatus(t)); store.save(); onChange(); return { turnId: t.id, done: Promise.resolve() }; }
+    if (action === 'revise') {   // 退回修改：同一棒重做，帶上意見與上一版；後面的棒次不受影響
+      if (t.mode !== 'relay') throw err('input', '只有分工接力可以退回修改');
+      const fb = String(note || '').trim(); if (!fb) throw err('input', '請寫下要修改的地方');
+      t.notes.pop();   // 修改意見只給這一棒，不當成全體補充
+      const old = live(t).filter(x => x.kind === 'stage' && x.round === after && x.status === 'ok').pop();
+      if (!old) throw err('input', '找不到這一棒的產出');
+      old.superseded = true;
+      t.steps.push({ id: uid(), kind: 'stage', round: after, ai: old.ai, status: 'pending', attempts: 0, revision: { feedback: fb.slice(0, 4000), previous: old.text, of: old.id } });
+    }
     if (action === 'auto') t.pause = false;
     return launch({ p, c, t });
+  }
+
+  // 共用資料裡「分享給所有 AI」的檔案放進工作資料夾 materials/，讓有讀取權限的 AI 能直接讀；只分享給部分 AI 的不放，避免繞過分享對象
+  function copyMaterials(ctx) {
+    const mats = (ctx.p.materials || []).filter(m => m.kind === 'file' && m.share === 'all' && m.fileName && (ctx.t.materials ? ctx.t.materials.includes(m.id) : m.auto !== false));
+    for (const m of mats) {
+      try { const file = resolveInside(ctx.workdir, 'materials/' + m.fileName); fs.mkdirSync(path.dirname(file), { recursive: true }); if (!fs.existsSync(file)) fs.writeFileSync(file, m.text || ''); } catch {}
+    }
   }
 
   // 共識、分歧與證據整理：由指定的 AI 只讀文字整理成 JSON，本程式再用實際讀取紀錄核對「有來源支持」

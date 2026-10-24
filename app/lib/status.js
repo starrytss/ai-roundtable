@@ -6,7 +6,26 @@ const counted = t => live(t).filter(s => !s.userSkipped && s.kind !== 'analysis'
 // 最後一輪 = 使用者沒有略過的回答中，輪次最大的一輪
 const lastRound = t => Math.max(0, ...counted(t).filter(s => s.kind === 'answer').map(s => s.round));
 
+// 分工接力：每一棒看最新的那一版；失敗的棒次或等待驗收時停下來等使用者
+function relayStatus(t) {
+  const steps = counted(t).filter(s => s.kind === 'stage'), n = (t.stages || []).length;
+  const latest = r => steps.filter(s => s.round === r).pop();
+  if (live(t).some(s => s.status === 'running')) return { status: 'running', reasons: [] };
+  if (t.stopped) return { status: 'stopped', reasons: [{ code: 'stopped' }] };
+  if (steps.some(s => s.status === 'interrupted')) return { status: 'interrupted', reasons: [{ code: 'interrupted' }] };
+  const failed = steps.filter(s => ['error', 'stopped'].includes(s.status) && latest(s.round) === s);
+  if (steps.some(s => s.status === 'pending')) {
+    if (failed.length) return { status: 'waiting', reasons: failed.map(s => ({ code: 'stage_failed', round: s.round, ai: s.ai, text: s.error?.text || '' })) };
+    return { status: 'waiting', reasons: [{ code: 'review', round: t.waitingAfter }] };
+  }
+  const ok = Array.from({ length: n }, (_, i) => latest(i + 1)).filter(s => s && s.status === 'ok').length;
+  if (!ok) return { status: 'failed', reasons: [{ code: 'all_failed' }] };
+  if (ok < n) return { status: 'partial', reasons: failed.map(s => ({ code: 'stage_failed', round: s.round, ai: s.ai, text: s.error?.text || '' })) };
+  return { status: 'done', reasons: [] };
+}
+
 function computeStatus(t) {
+  if (t.mode === 'relay') return relayStatus(t);
   const steps = counted(t), reasons = [];
   if (live(t).some(s => s.status === 'running')) return { status: 'running', reasons };
   if (t.stopped) return { status: 'stopped', reasons: [{ code: 'stopped' }] };

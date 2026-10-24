@@ -16,7 +16,8 @@ function main() {
   let prompt = input;
   if (provider === 'gemini') { try { prompt = JSON.parse(input.trim()).message.content; } catch {} }
   if (args.includes('{prompt}')) prompt = '';
-  const round = /你是查核整理員/.test(prompt) ? 'analysis' : /你是主持人/.test(prompt) ? 'sum' : (prompt.match(/目前是第 (\d+) 輪/) || [])[1] || '1';
+  const stage = (prompt.match(/目前是第 (\d+) 棒/) || [])[1];
+  const round = /你是查核整理員/.test(prompt) ? 'analysis' : /你是主持人/.test(prompt) ? 'sum' : stage ? 'S' + stage : (prompt.match(/目前是第 (\d+) 輪/) || [])[1] || '1';
   const who = process.env.RT_FAKE_AS || provider;
   const rule = rules[`${who}@${round}`] || rules[who] || 'ok';
   if (process.env.RT_FAKE_LOG) fs.appendFileSync(process.env.RT_FAKE_LOG, JSON.stringify({ provider: who, round, args, stdin: prompt, cwd: process.cwd(), at: Date.now() }) + '\n');

@@ -10,6 +10,23 @@ const diagnose = require('./lib/diagnose');
 const sec = require('./lib/security');
 const { workdirFor, resolveInside, listFiles } = require('./lib/workspace');
 const { BRIEF_FIELDS, MEM_LABEL } = require('./lib/context');
+const outputs = require('./lib/outputs');
+const { diff } = require('./lib/diff');
+const { branchChat, copyWorkspace } = require('./lib/branch');
+
+// 分工接力的團隊範本：職務與 AI 分開，同一個職務可以換不同 AI
+const defaultRelays = () => [
+  { name: '研究 → 企劃 → 審查 → 整理', stages: [
+    { role: '資料研究', ai: 'claude', task: '蒐集與問題相關的事實、數據與案例，附上來源網址，標明哪些是推論。', accept: '每個重要事實都有來源或標明推論', input: 'question' },
+    { role: '企劃提案', ai: 'chatgpt', task: '根據研究結果提出具體方案，包含步驟、時程與預算。', accept: '方案可以直接執行，數字有依據', input: 'previous' },
+    { role: '風險審查', ai: 'claude', task: '嚴格檢查方案的漏洞、風險與錯誤，提出修正建議。', accept: '列出風險等級與具體修正方式', input: 'all' },
+    { role: '最終整理', ai: 'chatgpt', task: '整合前面的內容與審查意見，產出最終版本。', accept: '採納或不採納審查意見都說明原因', input: 'all' }] },
+  { name: '需求 → 實作 → 測試', stages: [
+    { role: '需求整理', ai: 'claude', task: '把問題整理成明確的需求清單與驗收條件。', accept: '每個需求都可以驗收', input: 'question' },
+    { role: '實作', ai: 'chatgpt', task: '依需求完成實作或詳細設計。', accept: '逐條對應需求', input: 'previous' },
+    { role: '測試審查', ai: 'claude', task: '依驗收條件逐條檢查，列出未通過與修正方式。', accept: '每條需求都有通過或未通過的結論', input: 'all' }] },
+];
+const MAX_MATERIAL = 200000;
 
 const MEM_TYPES = Object.keys(MEM_LABEL);
 const localDate = () => new Date().toLocaleDateString('sv-SE');   // 本地日期 YYYY-MM-DD
@@ -109,7 +126,8 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
     const ais = Object.fromEntries(Object.entries(s.ais).map(([k, a]) => [k, { ...a, guarantee: a.mode === 'manual' ? null : providers.guarantee(a), needsAck: providers.needsAck(a),
       records: (providers.PROVIDERS[a.provider] || {}).records || [], untested: !!(providers.PROVIDERS[a.provider] || {}).untested, argvPrompt: !!(providers.PROVIDERS[a.provider] || {}).argvPrompt }]));
     return {
-      version: VERSION, settings: { ...s, ais, briefTemplates: s.briefTemplates || defaultBriefs() }, levels: providers.LEVELS.map(k => ({ key: k, label: providers.LEVEL_LABEL[k] })),
+      version: VERSION, settings: { ...s, ais, briefTemplates: s.briefTemplates || defaultBriefs(), relayTemplates: s.relayTemplates || defaultRelays() },
+      outputTemplates: Object.entries(outputs.OUTPUT_TEMPLATES).map(([key, v]) => ({ key, name: v.name })), levels: providers.LEVELS.map(k => ({ key: k, label: providers.LEVEL_LABEL[k] })),
       briefFields: BRIEF_FIELDS, memLabels: MEM_LABEL,
       projects: db().projects.map(p => ({ ...p, chats: p.chats.map(c => ({ id: c.id, title: c.title, updated: c.updated, status: (c.turns.at(-1) || {}).status })).sort((a, b) => b.updated - a.updated) })),
       privacy: { ...store.state, dataDir: paths.dataDir, workRoot: paths.workRoot, backups: store.listBackups().length },
@@ -216,7 +234,83 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
         if (process.platform === 'win32') execFile('explorer.exe', [dir], { windowsHide: true }, () => {});
         return { dir };
       }
-      case '/api/files/list': { if (!p || !findC(p, b.cid)) throw new Error('找不到對話'); const dir = workdirFor(paths.workRoot, p.id, b.cid); return { dir, files: listFiles(dir) }; }
+      case '/api/files/list': { const c = findC(p, b.cid); if (!c) throw new Error('找不到對話'); const dir = workdirFor(paths.workRoot, p.id, c.id); return { dir, files: outputs.fileIndex(dir, c), outputs: (c.outputs || []).map(({ text, ...o }) => o) }; }
+      case '/api/files/read': { const c = findC(p, b.cid); if (!c) throw new Error('找不到對話'); return outputs.readFile(workdirFor(paths.workRoot, p.id, c.id), String(b.path || '')); }
+      case '/api/files/download': {
+        const c = findC(p, b.cid); if (!c) throw new Error('找不到對話');
+        const file = resolveInside(workdirFor(paths.workRoot, p.id, c.id), String(b.path || '')), st = fs.lstatSync(file);
+        if (st.isSymbolicLink() || !st.isFile()) throw new Error('只能下載一般檔案');
+        if (st.size > 30 * 1024 * 1024) throw new Error('檔案超過 30 MB，請用「在檔案總管開啟」');
+        return { name: path.basename(file), file: fs.readFileSync(file).toString('base64') };
+      }
+      case '/api/outputs/save': {
+        const c = findC(p, b.cid), t = c && c.turns.find(x => x.id === b.turnId); if (!t) throw new Error('找不到這場討論');
+        const st = b.stepId ? t.steps.find(x => x.id === b.stepId && x.status === 'ok') : null, text = st ? st.text : t.summary;
+        if (!text) throw new Error('這場討論還沒有可以輸出的結論');
+        const rec = outputs.saveOutput({ workdir: workdirFor(paths.workRoot, p.id, c.id), chat: c, name: String(b.name || t.q.slice(0, 30)), format: b.format, text,
+          from: { turnId: t.id, stepId: st ? st.id : '', ai: st ? st.ai : (t.steps.filter(x => x.kind === 'summary' && x.status === 'ok' && !x.superseded).pop() || {}).ai, kind: st ? st.kind : 'summary' }, template: t.outputTemplate || '' });
+        c.updated = Date.now(); store.save(); const { text: _t, ...o } = rec; return { output: o };
+      }
+      case '/api/outputs/restore': {   // 回到先前版本：把舊版內容存成新的版本，不刪除任何版本
+        const c = findC(p, b.cid), o = c && (c.outputs || []).find(x => x.id === b.outputId); if (!o) throw new Error('找不到這個版本');
+        const rec = outputs.saveOutput({ workdir: workdirFor(paths.workRoot, p.id, c.id), chat: c, name: o.name, format: o.format, text: o.text, from: { ...o.from, kind: 'restore' }, template: o.template });
+        rec.restoredFrom = o.version; store.save(); const { text: _t, ...r } = rec; return { output: r };
+      }
+      case '/api/diff': {
+        const c = findC(p, b.cid); if (!c) throw new Error('找不到對話');
+        const pick = x => {
+          if (!x) return null;
+          if (x.kind === 'output') { const o = (c.outputs || []).find(y => y.id === x.id); return o && { text: o.text, label: `${o.name} v${o.version}` }; }
+          for (const t of c.turns) { const st = t.steps.find(y => y.id === x.id); if (st) return { text: st.text, label: `${S.ais[st.ai]?.name || st.ai} · ${st.kind === 'summary' ? '總結' : st.kind === 'stage' ? '第 ' + st.round + ' 棒' : '第 ' + st.round + ' 輪'}` }; }
+          return null;
+        };
+        const a = pick(b.a), z = pick(b.b); if (!a || !z) throw new Error('請選擇兩個要比較的版本');
+        return { a: a.label, b: z.label, ...diff(a.text, z.text) };
+      }
+      case '/api/decisions/add': {
+        const c = findC(p, b.cid); if (!c) throw new Error('找不到對話');
+        if (!['accepted', 'rejected'].includes(b.verdict) || !String(b.text || '').trim()) throw new Error('請填寫建議內容並選擇採納或不採納');
+        const d = { id: uid(), verdict: b.verdict, text: String(b.text).trim().slice(0, 2000), reason: String(b.reason || '').trim().slice(0, 2000), from: String(b.from || '').slice(0, 120), at: Date.now() };
+        (c.decisions = c.decisions || []).push(d);
+        if (b.toMemory) p.memories.push({ id: uid(), type: d.verdict === 'accepted' ? 'decision' : 'rejected', text: d.text + (d.reason ? `（原因：${d.reason}）` : ''), status: 'active', date: localDate(), at: Date.now(), source: { cid: c.id, chat: c.title, turnId: '', ai: '' } });
+        store.save(); return { decisions: c.decisions };
+      }
+      case '/api/decisions/delete': { const c = findC(p, b.cid); if (c) { c.decisions = (c.decisions || []).filter(x => x.id !== b.id); store.save(); } return { decisions: c ? c.decisions : [] }; }
+      case '/api/chat/branch': {
+        if (engine.busy) throw new Error('討論進行中，請等它結束再建立分支');
+        const c = findC(p, b.cid); if (!c) throw new Error('找不到對話');
+        const n = branchChat({ project: p, chat: c, turnId: b.turnId, round: b.round, title: b.title, uid });
+        const copied = copyWorkspace(workdirFor(paths.workRoot, p.id, c.id), workdirFor(paths.workRoot, p.id, n.id));
+        store.save(); return { id: n.id, copied };
+      }
+      case '/api/materials/add': {
+        if (!p) throw new Error('找不到專案');
+        const kind = ['text', 'url', 'file'].includes(b.kind) ? b.kind : 'text', url = String(b.url || '').trim();
+        if (kind === 'url' && !/^https?:\/\/\S+$/.test(url)) throw new Error('網址必須以 http:// 或 https:// 開頭');
+        const text = String(b.text || ''); if (kind !== 'url' && !text.trim()) throw new Error('內容是空的');
+        if (text.length > MAX_MATERIAL) throw new Error(`內容超過 ${MAX_MATERIAL.toLocaleString()} 字，請只放需要的部分`);
+        const m = { id: uid(), kind, title: String(b.title || (kind === 'url' ? url : '資料')).trim().slice(0, 80), text, url: kind === 'url' ? url : '', at: Date.now(),
+          fileName: kind === 'file' ? outputs.slug(b.fileName || b.title || 'material') + (/\.[\w]{1,5}$/.test(b.fileName || '') ? '' : '.txt') : '',
+          share: b.share === 'all' || !Array.isArray(b.share) ? 'all' : b.share.filter(k => S.ais[k]), auto: b.auto !== false };
+        if (m.kind === 'file' && /\.[\w]{1,5}$/.test(b.fileName || '')) m.fileName = outputs.slug(String(b.fileName).replace(/\.[\w]{1,5}$/, '')) + String(b.fileName).match(/\.[\w]{1,5}$/)[0].toLowerCase();
+        (p.materials = p.materials || []).push(m); store.save(); return { materials: p.materials };
+      }
+      case '/api/materials/update': {
+        const m = p && (p.materials || []).find(x => x.id === b.id); if (!m) throw new Error('找不到這份資料');
+        if (typeof b.title === 'string') m.title = b.title.trim().slice(0, 80) || m.title;
+        if (b.share === 'all' || Array.isArray(b.share)) m.share = b.share === 'all' ? 'all' : b.share.filter(k => S.ais[k]);
+        if (typeof b.auto === 'boolean') m.auto = b.auto;
+        store.save(); return { materials: p.materials };
+      }
+      case '/api/materials/delete': if (p) { p.materials = (p.materials || []).filter(x => x.id !== b.id); store.save(); } return { materials: p ? p.materials : [] };
+      case '/api/relay/save': {
+        const name = String(b.name || '').trim().slice(0, 40); if (!name) throw new Error('請輸入範本名稱');
+        const stages = (b.stages || []).slice(0, 8).map(x => ({ role: String(x.role || '').slice(0, 40), ai: S.ais[x.ai] ? x.ai : '', task: String(x.task || '').slice(0, 2000), accept: String(x.accept || '').slice(0, 1000), input: ['previous', 'all', 'question'].includes(x.input) ? x.input : 'previous' }));
+        if (!stages.length) throw new Error('範本至少要有一棒');
+        S.relayTemplates = (S.relayTemplates || defaultRelays()).filter(x => x.name !== name); S.relayTemplates.push({ name, stages });
+        store.save(); return { relayTemplates: S.relayTemplates };
+      }
+      case '/api/relay/delete': S.relayTemplates = (S.relayTemplates || defaultRelays()).filter(x => x.name !== b.name); store.save(); return { relayTemplates: S.relayTemplates };
       case '/api/bye': if (open) setTimeout(() => { if (!engine.busy && Date.now() - lastHit > 4000) quit(); }, 6000); return;
     }
     throw new Error('未知的操作');

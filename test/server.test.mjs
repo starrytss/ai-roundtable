@@ -151,3 +151,39 @@ test('brief templates: defaults are offered, a saved template replaces one with 
     assert.ok(!(await s.api('/api/briefs/delete', { name: '我的範本' })).json.briefTemplates.some(x => x.name === '我的範本'));
   } finally { s.quit(); }
 });
+
+test('phase 3 API: materials validation, saved output, diff, adoption log to memory, branch, relay templates', async () => {
+  const s = await boot();
+  try {
+    const pid = (await s.api('/api/state')).json.projects[0].id;
+    const cid = (await s.api('/api/chat/new', { pid })).json.id;
+    assert.match((await s.api('/api/materials/add', { pid, kind: 'url', url: 'javascript:alert(1)' })).json.error, /http/);
+    assert.match((await s.api('/api/materials/add', { pid, kind: 'text', text: 'x'.repeat(200001) })).json.error, /超過/);
+    const m = (await s.api('/api/materials/add', { pid, kind: 'file', title: '報價', fileName: '../../evil.txt', text: '內容', share: ['claude', 'nobody'] })).json.materials[0];
+    assert.equal(m.fileName, 'evil.txt'); assert.deepEqual(m.share, ['claude']);
+    await s.api('/api/settings', { ais: { gemini: { ack: true } } });
+    await s.api('/api/send', { pid, cid, q: '問題', ids: ['claude', 'gemini'], mod: 'claude', rounds: 1, outputTemplate: 'decision' });
+    let chat; for (let i = 0; i < 80; i++) { chat = (await s.api(`/api/chat?pid=${pid}&cid=${cid}`)).json; if (!chat.run) break; await new Promise(x => setTimeout(x, 100)); }
+    const t = chat.chat.turns.at(-1);
+    assert.equal(t.outputTemplate, 'decision');
+    const o1 = (await s.api('/api/outputs/save', { pid, cid, turnId: t.id, format: 'md', name: '決策' })).json.output;
+    const o2 = (await s.api('/api/outputs/restore', { pid, cid, outputId: o1.id })).json.output;
+    assert.equal(o2.version, 2); assert.equal(o2.restoredFrom, 1);
+    const files = (await s.api('/api/files/list', { pid, cid })).json;
+    assert.ok(files.files.some(f => f.path === 'outputs/決策-v1.md' && f.output));
+    assert.match((await s.api('/api/files/read', { pid, cid, path: '../../../data.enc' })).json.error, /不在允許/);
+    const dl = (await s.api('/api/files/download', { pid, cid, path: 'outputs/決策-v1.md' })).json;
+    assert.equal(Buffer.from(dl.file, 'base64').toString(), t.summary);
+    const steps = t.steps.filter(x => x.kind === 'answer');
+    const d = (await s.api('/api/diff', { pid, cid, a: { kind: 'step', id: steps[0].id }, b: { kind: 'output', id: o1.id } })).json;
+    assert.ok(d.ops.length && d.a && d.b);
+    const dec = (await s.api('/api/decisions/add', { pid, cid, verdict: 'rejected', text: '方案 C', reason: '太貴', toMemory: true })).json;
+    assert.equal(dec.decisions[0].verdict, 'rejected');
+    assert.ok((await s.api('/api/state')).json.projects[0].memories.some(x => x.type === 'rejected' && x.text.includes('太貴')));
+    const br = (await s.api('/api/chat/branch', { pid, cid, turnId: t.id, round: 1, title: '方案 B' })).json;
+    assert.ok(br.id); assert.ok(br.copied >= 2);
+    const st = (await s.api('/api/state')).json;
+    assert.ok(st.settings.relayTemplates.length >= 2 && st.outputTemplates.length === 6);
+    assert.match((await s.api('/api/relay/save', { name: '空', stages: [] })).json.error, /至少/);
+  } finally { s.quit(); }
+});
