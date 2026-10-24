@@ -1,0 +1,205 @@
+// AI圓桌會議 v1.1（山姆蛋實驗室）：Node.js 18+，不需安裝套件
+// 啟動：雙擊「AI圓桌會議」捷徑，或執行 node app/server.js [--app] [--replace] [--port N] [--data-dir 路徑]
+const http = require('http'), fs = require('fs'), path = require('path'), { exec, execFile } = require('child_process');
+const { resolvePaths } = require('./lib/paths');
+const { openStore, newProject, uid, DEFAULT_AIS } = require('./lib/store');
+const { createEngine } = require('./lib/engine');
+const { scanSkills } = require('./lib/skills');
+const providers = require('./lib/providers');
+const diagnose = require('./lib/diagnose');
+const sec = require('./lib/security');
+const { workdirFor, resolveInside, listFiles } = require('./lib/workspace');
+
+const VERSION = '1.1.0';
+const ROOT = path.resolve(__dirname, '..'), UI = path.join(__dirname, 'ui');
+const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
+const APP = process.argv.includes('--app');
+
+async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-dir'), open = APP, protector } = {}) {
+  const paths = resolvePaths({ appDir: ROOT, dataDir });
+  fs.mkdirSync(paths.dataDir, { recursive: true });
+
+  // 單一執行個體：已有確定是本程式的執行個體 → --replace 時請它結束，否則直接打開它的視窗
+  const running = await sec.findRunning(paths.lockFile);
+  if (running) {
+    if (process.argv.includes('--replace')) { const r = await sec.stopRunning(paths.lockFile); if (!r.stopped) { console.log('無法關閉正在執行的 AI圓桌會議：' + r.reason); process.exit(1); } }
+    else { console.log('AI圓桌會議已經在執行：http://localhost:' + running.port); if (open) openWindow(running.port); return { alreadyRunning: running }; }
+  }
+
+  let store;
+  try { store = openStore(paths, protector ? { protector } : {}); }
+  catch (e) { console.log('\n無法開啟資料：' + e.message + '\n'); if (open) execFile('mshta', [`javascript:alert(${JSON.stringify('AI圓桌會議無法開啟資料：' + e.message)});close()`]); process.exit(1); }
+  store.purgeExpired();
+  const engine = createEngine({ store, skills: () => scanSkills() });
+
+  // 連接埠被其他程式占用時改用下一個，不會去結束別人的程式
+  const server = http.createServer();
+  const listen = p => new Promise((res, rej) => { server.once('error', rej); server.listen(p, '127.0.0.1', () => { server.off('error', rej); res(server.address().port); }); });
+  let actual;
+  for (let p = port, n = 0; ; p++, n++) { try { actual = await listen(p); break; } catch (e) { if (e.code !== 'EADDRINUSE' || n >= 9 || port === 0) throw e; } }
+  const token = sec.newToken(), hosts = sec.hostsFor(actual), lock = sec.writeLock(paths.lockFile, actual);
+  let lastHit = Date.now();
+  const quit = () => { sec.clearLock(paths.lockFile, lock); engine.stop(); server.close(); setTimeout(() => process.exit(0), 300).unref(); };
+  process.on('SIGINT', quit); process.on('SIGTERM', quit);
+  if (open) setInterval(() => { if (!engine.busy && Date.now() - lastHit > 150000) quit(); }, 10000).unref();
+
+  const send = (res, code, body, type = 'application/json') => {
+    res.writeHead(code, { ...sec.SECURITY_HEADERS, 'Content-Type': type + '; charset=utf-8' });
+    res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
+  };
+  const readBody = (req, max = 60 * 1024 * 1024) => new Promise((res, rej) => {
+    let n = 0; const parts = [];
+    req.on('data', d => { n += d.length; if (n > max) { rej(new Error('內容太大')); req.destroy(); } else parts.push(d); });
+    req.on('end', () => { try { res(JSON.parse(Buffer.concat(parts).toString('utf8') || '{}')); } catch { res({}); } });
+  });
+  const STATIC = { '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.html': 'text/html' };
+  const db = () => store.db, findP = id => db().projects.find(p => p.id === id), findC = (p, id) => p && p.chats.find(c => c.id === id);
+  const diag = () => (db().settings.diag = db().settings.diag || {});
+
+  server.on('request', async (req, res) => {
+    const u = new URL(req.url, 'http://x'), url = u.pathname;
+    if (!sec.trusted(req, u, { token, hosts })) return send(res, 403, { error: 'forbidden' });
+    lastHit = Date.now();
+    try {
+      if (url === '/__identity') return send(res, 200, { app: 'ai-roundtable', instance: lock.instance, version: VERSION });
+      if (url === '/__shutdown' && req.method === 'POST') { if (req.headers['x-rt-secret'] !== lock.secret) return send(res, 403, { error: 'forbidden' }); send(res, 200, { ok: true }); return quit(); }
+      if (url === '/') return send(res, 200, fs.readFileSync(path.join(UI, 'index.html'), 'utf8').replace('<meta charset="utf-8">', `$&\n<meta name="rt-token" content="${token}">`), 'text/html');
+      if (url.startsWith('/ui/') && req.method === 'GET') {
+        const f = resolveInside(UI, decodeURIComponent(url.slice(4)));
+        if (!STATIC[path.extname(f)] || !fs.existsSync(f)) return send(res, 404, 'not found', 'text/plain');
+        return send(res, 200, fs.readFileSync(f), STATIC[path.extname(f)]);
+      }
+      if (req.method === 'GET') {
+        if (url === '/api/state') return send(res, 200, stateView());
+        if (url === '/api/chat') {
+          const c = findC(findP(u.searchParams.get('pid')), u.searchParams.get('cid'));
+          return send(res, 200, { chat: c || null, now: Date.now(), run: engine.state() });
+        }
+        if (url === '/api/skills') return send(res, 200, scanSkills({ refresh: !!u.searchParams.get('refresh') }));
+        return send(res, 404, { error: 'not found' });
+      }
+      const b = await readBody(req), p = findP(b.pid);
+      const out = await route(url, b, p);
+      return send(res, 200, out === undefined ? { ok: true } : out);
+    } catch (e) {
+      return send(res, 200, { error: e.message, code: e.code, ai: e.ai, steps: e.steps });
+    }
+  });
+
+  function stateView() {
+    const s = db().settings;
+    const ais = Object.fromEntries(Object.entries(s.ais).map(([k, a]) => [k, { ...a, guarantee: a.mode === 'manual' ? null : providers.guarantee(a), needsAck: providers.needsAck(a),
+      records: (providers.PROVIDERS[a.provider] || {}).records || [], untested: !!(providers.PROVIDERS[a.provider] || {}).untested, argvPrompt: !!(providers.PROVIDERS[a.provider] || {}).argvPrompt }]));
+    return {
+      version: VERSION, settings: { ...s, ais }, levels: providers.LEVELS.map(k => ({ key: k, label: providers.LEVEL_LABEL[k] })),
+      projects: db().projects.map(p => ({ ...p, chats: p.chats.map(c => ({ id: c.id, title: c.title, updated: c.updated, status: (c.turns.at(-1) || {}).status })).sort((a, b) => b.updated - a.updated) })),
+      privacy: { ...store.state, dataDir: paths.dataDir, workRoot: paths.workRoot, backups: store.listBackups().length },
+      run: engine.state(),
+    };
+  }
+
+  async function route(url, b, p) {
+    const S = db().settings;
+    switch (url) {
+      case '/api/project/new': { const n = newProject(String(b.name || '新專案').slice(0, 80)); db().projects.unshift(n); store.save(); return { id: n.id }; }
+      case '/api/project/update': if (p) { for (const f of ['name', 'instructions', 'memory']) if (typeof b[f] === 'string') p[f] = b[f]; store.save(); } return;
+      case '/api/project/delete':
+        if (engine.state()?.pid === b.pid) throw new Error('這個專案正在討論中');
+        store.backup('before-delete-project');
+        db().projects = db().projects.filter(x => x.id !== b.pid);
+        if (!db().projects.length) db().projects.push(newProject());
+        store.save(); return;
+      case '/api/chat/new': { if (!p) throw new Error('找不到專案'); const c = { id: uid(), title: '新對話', updated: Date.now(), turns: [] }; p.chats.push(c); store.save(); return { id: c.id }; }
+      case '/api/chat/delete':
+        if (engine.state()?.cid === b.cid) throw new Error('這個對話正在討論中');
+        if (p) { p.chats = p.chats.filter(c => c.id !== b.cid); store.save(); } return;
+      case '/api/chat/rename': { const c = findC(p, b.cid); if (c && String(b.title || '').trim()) { c.title = String(b.title).trim().slice(0, 60); store.save(); } return; }
+      case '/api/memory/add': if (p && b.text) { p.memory = (p.memory ? p.memory + '\n\n' : '') + String(b.text); store.save(); } return;
+
+      case '/api/settings': {
+        for (const [k, v] of Object.entries(b.ais || {})) {
+          const a = S.ais[k]; if (!a || !v) continue;
+          for (const f of ['name', 'role', 'model', 'cmd']) if (typeof v[f] === 'string') a[f] = v[f].trim().slice(0, f === 'role' ? 300 : 200);
+          if (['auto', 'manual'].includes(v.mode)) a.mode = v.mode;
+          if (providers.LEVELS.includes(v.level)) { if (v.level !== a.level) a.ack = false; a.level = v.level; }
+          if (typeof v.ack === 'boolean') a.ack = v.ack;
+          if (typeof v.isolate === 'boolean') a.isolate = v.isolate;
+          if (a.provider === 'custom' && !a.cmd) a.mode = 'manual';
+        }
+        if (b.privacy) { if (typeof b.privacy.redact === 'boolean') S.privacy.redact = b.privacy.redact; if (typeof b.privacy.reduceTraffic === 'boolean') S.privacy.reduceTraffic = b.privacy.reduceTraffic; }
+        if (b.limits) for (const [k, lo, hi] of [['maxCalls', 1, 100], ['maxRetries', 0, 10], ['timeoutMin', 1, 60], ['budgetChars', 4000, 200000]]) if (Number.isFinite(+b.limits[k])) S.limits[k] = Math.max(lo, Math.min(hi, Math.round(+b.limits[k])));
+        store.save(); return stateView();
+      }
+      case '/api/settings/reset-ai': { const def = DEFAULT_AIS()[b.id]; if (def) { S.ais[b.id] = { ...def }; store.save(); } return stateView(); }
+
+      case '/api/preview': return engine.preview(b);
+      case '/api/send': { const r = engine.start(b); return { turnId: r.turnId }; }
+      case '/api/turn/retry': { const r = engine.retry(b); return { turnId: r.turnId }; }
+      case '/api/turn/resume': { const r = engine.resume(b); return { turnId: r.turnId }; }
+      case '/api/turn/more': { const r = engine.more(b); return { turnId: r.turnId }; }
+      case '/api/stop': engine.stop(); return;
+      case '/api/manual': engine.manual(b); return;
+
+      case '/api/setup/check': return Promise.all(Object.entries(S.ais).map(([k, a]) => diagnose.check(k, a, diag()[k])));
+      case '/api/setup/test': {
+        const a = S.ais[b.id]; if (!a) throw new Error('找不到這個 AI');
+        if (a.mode === 'manual') return { ok: false, text: '手動貼上模式不需要測試。' };
+        const r = await diagnose.test(a, { workdir: workdirFor(paths.workRoot, 'diagnose00', 'connection') });
+        diag()[b.id] = r; if (r.rateLimit) (S.usage = S.usage || {})[b.id] = { rateLimit: r.rateLimit, at: Date.now() };
+        store.save(); return r;
+      }
+      case '/api/setup/open': {
+        const a = S.ais[b.id], s = (providers.PROVIDERS[a?.provider] || {}).setup || {};
+        if (process.platform !== 'win32') return;
+        if (b.action === 'page' && /^https:\/\//.test(s.page || '')) execFile('cmd', ['/c', 'start', '', s.page], { windowsHide: true });
+        else if (b.action === 'install' && s.install) openConsole(`${a.name}：安裝`, installScript(s.install));
+        else if (b.action === 'login' && s.login) openConsole(`${a.name}：登入`, s.login);
+        return;
+      }
+      case '/api/setup/done': S.setupDone = true; store.save(); return;
+
+      case '/api/data/info': return { ...store.state, dataDir: paths.dataDir, workRoot: paths.workRoot, backups: store.listBackups(), retentionDays: S.privacy.retentionDays,
+        records: Object.fromEntries(Object.entries(providers.PROVIDERS).map(([k, v]) => [k, { name: v.name, records: v.records || [], logout: v.setup?.logout || '' }])) };
+      case '/api/data/backup': return { name: store.backup('manual') };
+      case '/api/data/restore': if (engine.busy) throw new Error('討論進行中，請等它結束再還原'); store.restore(String(b.name)); return stateView();
+      case '/api/data/export': return { file: store.exportData({ password: b.password || '' }).toString('base64'), protected: !!b.password };
+      case '/api/data/import': if (engine.busy) throw new Error('討論進行中，請等它結束再匯入'); store.importData(Buffer.from(String(b.file || ''), 'base64'), { password: b.password }); return stateView();
+      case '/api/data/encryption': return { encryption: store.setEncryption(!!b.on), error: store.state.encryptionError };
+      case '/api/data/retention': { S.privacy.retentionDays = Math.max(0, Math.min(3650, b.days | 0)); store.save(); return { removed: store.purgeExpired() }; }
+      case '/api/data/delete-legacy': return { deleted: store.deleteLegacyPlaintext() };
+      case '/api/data/open': {
+        const dir = b.which === 'work' && p && b.cid ? workdirFor(paths.workRoot, p.id, b.cid) : b.which === 'backups' ? paths.backupDir : paths.dataDir;
+        if (process.platform === 'win32') execFile('explorer.exe', [dir], { windowsHide: true }, () => {});
+        return { dir };
+      }
+      case '/api/files/list': { if (!p || !findC(p, b.cid)) throw new Error('找不到對話'); const dir = workdirFor(paths.workRoot, p.id, b.cid); return { dir, files: listFiles(dir) }; }
+      case '/api/bye': if (open) setTimeout(() => { if (!engine.busy && Date.now() - lastHit > 4000) quit(); }, 6000); return;
+    }
+    throw new Error('未知的操作');
+  }
+
+  console.log(`AI圓桌會議 v${VERSION}（山姆蛋實驗室）已啟動：http://localhost:${actual}（這個視窗請保持開啟）`);
+  console.log('資料位置：' + paths.dataDir + '（加密：' + store.state.encryption + '）');
+  if (open) openWindow(actual);
+  return { server, port: actual, token, store, engine, paths, quit };
+}
+
+// 安裝：先顯示來源網址並要求輸入 Y 才下載執行，不會無提示執行遠端腳本
+function installScript(cmd) {
+  const url = (cmd.match(/https:\/\/\S+/) || [])[0];
+  if (!url) return `Write-Host '將執行：${cmd}'; if ((Read-Host '確認安裝請輸入 Y') -eq 'Y') { ${cmd} }`;
+  return `Write-Host '將從官方網址下載並執行安裝程式：' -ForegroundColor Yellow; Write-Host '${url}'; Write-Host '本程式無法驗證這個腳本的內容，請確認網址是官方來源。'; if ((Read-Host '確認安裝請輸入 Y') -eq 'Y') { ${cmd} }`;
+}
+// 指令以 -EncodedCommand 傳入，避免 cmd 把引號或 | 誤解；指令只會來自 providers.js 寫死的清單
+function openConsole(title, command) {
+  const enc = Buffer.from(`$Host.UI.RawUI.WindowTitle = 'AI圓桌會議：${title.replace(/'/g, '')}'; ${command}`, 'utf16le').toString('base64');
+  execFile('cmd', ['/c', 'start', '', 'powershell', '-NoProfile', '-NoExit', '-EncodedCommand', enc], { windowsHide: true }, () => {});
+}
+function openWindow(port) {
+  if (process.platform !== 'win32') return;
+  const url = `http://localhost:${port}`;
+  exec(`start "" msedge --app=${url} --window-size=1300,880`, e => { if (e) execFile('cmd', ['/c', 'start', '', url], { windowsHide: true }); });
+}
+
+if (require.main === module) main().catch(e => { console.log('錯誤：' + e.message); process.exit(1); });
+module.exports = { main, VERSION };

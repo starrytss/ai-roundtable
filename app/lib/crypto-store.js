@@ -18,7 +18,11 @@ const dpapiProtector = () => ({ name: 'dpapi', protect: b => dpapi('Protect', b)
 
 // 讀取或建立資料金鑰；protector 失敗就丟出錯誤，由呼叫端改用明文模式並提示使用者
 function loadOrCreateKey(keyFile, protector) {
-  if (fs.existsSync(keyFile)) return protector.unprotect(fs.readFileSync(keyFile));
+  if (fs.existsSync(keyFile)) {
+    const key = protector.unprotect(fs.readFileSync(keyFile));
+    if (!Buffer.isBuffer(key) || key.length !== 32) throw new Error('資料金鑰格式不正確（可能不是同一個 Windows 帳戶）');
+    return key;
+  }
   const key = crypto.randomBytes(32), wrapped = protector.protect(key);
   if (!protector.unprotect(wrapped).equals(key)) throw new Error('資料金鑰驗證失敗');
   fs.writeFileSync(keyFile, wrapped);

@@ -3,13 +3,16 @@
 // RT_FAKE_LOG = 每次呼叫附加一行 JSON（provider、參數、stdin、cwd）
 import fs from 'node:fs';
 const [, , provider, ...args] = process.argv;
-const rules = JSON.parse(process.env.RT_FAKE_RULES || '{}');
+const rules = JSON.parse((process.env.RT_FAKE_RULES_FILE && fs.existsSync(process.env.RT_FAKE_RULES_FILE) && fs.readFileSync(process.env.RT_FAKE_RULES_FILE, 'utf8')) || process.env.RT_FAKE_RULES || '{}');
 let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', d => input += d);
 process.stdin.on('end', main);
 
 function main() {
+  if (args.includes('--version')) { process.stdout.write('fake-cli 0.0.0\n'); process.exit(0); }
+  if (args.includes('--help')) { process.stdout.write(process.env.RT_FAKE_HELP ?? '--restricted --safe-mode --tools stream-json --ignore-user-config --ephemeral --json --input-format --disable-slash-commands\n'); process.exit(0); }
+  if (args[0] === 'auth' || args[0] === 'login') { process.stdout.write(process.env.RT_FAKE_LOGGEDIN === '0' ? 'Not logged in\n' : '{"loggedIn": true}\n'); process.exit(0); }
   let prompt = input;
   if (provider === 'gemini') { try { prompt = JSON.parse(input.trim()).message.content; } catch {} }
   if (args.includes('{prompt}')) prompt = '';

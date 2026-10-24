@@ -89,8 +89,20 @@ test('an existing encrypted file whose key cannot be unwrapped is never overwrit
   const { paths } = tmp();
   openStore(paths, { protector: fakeProtector });
   const before = fs.readFileSync(paths.encFile);
-  assert.throws(() => openStore(paths, { protector: failingProtector }), /無法解開資料金鑰/);
+  assert.throws(() => openStore(paths, { protector: failingProtector }), /無法解開資料/);
   assert.deepEqual(fs.readFileSync(paths.encFile), before);
+});
+
+test('a different key (other Windows account) never moves or overwrites the data file', () => {
+  const { paths } = tmp();
+  const s = openStore(paths, { protector: fakeProtector }); s.backup('manual');
+  const before = fs.readFileSync(paths.encFile);
+  const other = b => Buffer.from(b.map(x => x ^ 0x33));
+  assert.throws(() => openStore(paths, { protector: { protect: other, unprotect: other } }), e => e.code === 'KEY');
+  const wrongKey = { protect: xor, unprotect: () => Buffer.alloc(32, 7) };
+  assert.throws(() => openStore(paths, { protector: wrongKey }), e => e.code === 'KEY');
+  assert.deepEqual(fs.readFileSync(paths.encFile), before);
+  assert.ok(!fs.readdirSync(paths.dataDir).some(n => n.includes('corrupt')));
 });
 
 test('corrupt data file is kept aside and the newest good backup is loaded', () => {

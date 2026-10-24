@@ -110,9 +110,16 @@ function openStore(paths, { protector = cs.dpapiProtector(), now = () => Date.no
   const wantEnc = () => (db ? db.settings.privacy.encryption : 'on') !== 'off';
   let raw = null, source = null;
   if (fs.existsSync(paths.encFile)) {
-    if (!tryKey()) throw Object.assign(new Error('無法解開資料金鑰（DPAPI）：' + state.encryptionError + '。資料沒有被修改，請確認是用原本的 Windows 帳戶開啟。'), { code: 'KEY' });
-    try { raw = unpack(fs.readFileSync(paths.encFile)); source = 'enc'; }
-    catch (e) { state.recovered = { file: 'data.enc', error: e.message }; }
+    const keyErr = why => Object.assign(new Error('無法解開資料（' + why + '）。資料沒有被修改，請確認是用原本的 Windows 帳戶開啟。'), { code: 'KEY' });
+    if (!tryKey()) throw keyErr(state.encryptionError);
+    const buf = fs.readFileSync(paths.encFile);
+    let plain = null;
+    try { plain = cs.open(key, buf); } catch (e) {
+      // 解不開：可能是檔案損壞，也可能是金鑰不對。只有備份解得開時才判定為檔案損壞，否則什麼都不動
+      if (!listBackups().some(b => { try { readBackup(b.name); return true; } catch { return false; } })) throw keyErr(e.message);
+      state.recovered = { file: 'data.enc', error: '無法解密：' + e.message };
+    }
+    if (plain) { try { raw = JSON.parse(plain.toString('utf8')); source = 'enc'; } catch (e) { state.recovered = { file: 'data.enc', error: e.message }; } }
   } else if (fs.existsSync(paths.plainFile)) {
     try { raw = unpack(fs.readFileSync(paths.plainFile)); source = 'plain'; }
     catch (e) { state.recovered = { file: 'data.json', error: e.message }; }
