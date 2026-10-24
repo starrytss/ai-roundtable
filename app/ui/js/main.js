@@ -1,7 +1,7 @@
 import { $, S, api, esc, ai, toast, copy, savePref, when, secs, P, tokenParam, STATUS } from './core.js';
 import { renderChat, chatMarkdown, texts, toggleExpand, rememberToggle, MODES } from './chat.js';
-import { renderComposer, bindComposer, autosize, refreshCheck, req, lastPreview, renderHL } from './composer.js';
-import { openPreview, openAISettings, saveAI, openSetup, bindSetup, openData, bindData, openFiles, bindProject } from './dialogs.js';
+import { renderComposer, bindComposer, autosize, refreshCheck, req, lastPreview, renderHL, renderExtras } from './composer.js';
+import { openPreview, openAISettings, saveAI, openSetup, bindSetup, openData, bindData, openFiles, bindProject, openBrief, bindBrief, openMem, bindMem, openAnalyze, bindAnalyze, bindMemList } from './dialogs.js';
 
 /* ---------- 載入與更新 ---------- */
 async function load() {
@@ -83,7 +83,7 @@ async function doSend() {
   if (!S.cid) { S.cid = (await api('/api/chat/new', { pid: S.pid })).id; }
   const r = await api('/api/send', req());
   if (r.error) { toast(r.error, 4500); if (r.code === 'ack') openAISettings(); return; }
-  $('#q').value = ''; autosize(); await load();
+  $('#q').value = ''; S.pref.quote = null; S.pref.brief = null; savePref(); renderExtras(); autosize(); await load();
   $('#log').scrollTop = $('#log').scrollHeight;
 }
 
@@ -99,20 +99,36 @@ async function act(url, body) {
   await tick();
 }
 $('#log').onclick = async e => {
-  const d = e.target.closest('[data-mem],[data-copysum],[data-more],[data-reask],[data-copytext],[data-exp],[data-mode],[data-retry],[data-retryall],[data-resum],[data-resume],[data-setup]');
+  const d = e.target.closest('[data-mem],[data-copysum],[data-more],[data-reask],[data-copytext],[data-exp],[data-mode],[data-retry],[data-retryall],[data-resum],[data-resume],[data-setup],[data-quote],[data-verify],[data-goto],[data-analyze],[data-iact]');
   if (!d) { document.body.classList.remove('side'); return; }
   const ds = d.dataset;
   if (ds.mode) { S.pref.mode = ds.mode; savePref(); renderComposer(); $('#q').value = ds.ex; autosize(); return $('#q').focus(); }
   if (ds.copytext) return copy(texts[ds.copytext]);
   if (ds.exp) { toggleExpand(ds.exp); return renderChat(); }
   if (ds.setup !== undefined) return openSetup();
+  if (ds.quote) { const t = turnOf(ds.turn), s = t.steps.find(x => x.id === ds.quote); return quoteIt(t, s, s.text); }
+  if (ds.verify !== undefined) {
+    const t = turnOf(ds.turn), c = t.analysis.claims[+ds.verify], analyst = (t.steps.find(x => x.kind === 'analysis' && !x.superseded) || {}).ai;
+    const who = t.ids.find(i => i !== analyst) || t.ids[0];
+    return quoteIt(t, { ai: analyst || who, round: null, id: '' }, c.claim, `@${ai(who).name} 請上網查證引用的主張是否正確，附上你實際讀取的來源網址，並說明來源是否支持這個主張。`);
+  }
+  if (ds.goto) {
+    const el = document.getElementById('step-' + ds.goto); if (!el) return toast('原文不在這個對話裡');
+    el.closest('details')?.setAttribute('open', ''); el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.animate([{ outline: '3px solid var(--gold)' }, { outline: '3px solid transparent' }], { duration: 1600 }); return;
+  }
+  if (ds.analyze) return openAnalyze(turnOf(ds.analyze));
+  if (ds.iact) {
+    const box = d.closest('[data-intervene]');
+    return act('/api/turn/intervene', { turnId: box.dataset.intervene, action: ds.iact, note: box.querySelector('[data-inote]').value, skip: [...box.querySelectorAll('[data-iskip]:checked')].map(x => x.dataset.iskip) });
+  }
   if (ds.retry) return act('/api/turn/retry', { turnId: ds.turn, stepIds: [ds.retry] });
-  if (ds.retryall) { const t = turnOf(ds.retryall); return act('/api/turn/retry', { turnId: t.id, stepIds: t.steps.filter(s => !s.superseded && s.kind === 'answer' && ['error', 'stopped', 'skipped'].includes(s.status)).map(s => s.id) }); }
+  if (ds.retryall) { const t = turnOf(ds.retryall); return act('/api/turn/retry', { turnId: t.id, stepIds: t.steps.filter(s => !s.superseded && !s.userSkipped && s.kind === 'answer' && ['error', 'stopped', 'skipped'].includes(s.status)).map(s => s.id) }); }
   if (ds.resum) return act('/api/turn/retry', { turnId: ds.resum, summary: true });
   if (ds.resume) return act('/api/turn/resume', { turnId: ds.resume });
   if (ds.more) return act('/api/turn/more', { turnId: ds.more });
   const t = turnOf(ds.mem || ds.copysum || ds.reask);
-  if (ds.mem) { await api('/api/memory/add', { pid: S.pid, text: `【${t.q.slice(0, 40)}】\n${t.summary}` }); await load(); return toast('已加入專案記憶'); }
+  if (ds.mem) { const sum = t.steps.filter(x => x.kind === 'summary' && x.status === 'ok' && !x.superseded).pop(); return openMem(t.summary, { cid: S.cid, turnId: t.id, ai: sum ? sum.ai : t.ids[0] }); }
   if (ds.copysum) return copy(t.summary, '已複製結論');
   if (ds.reask) { $('#q').value = t.q; autosize(); return $('#q').focus(); }
 };
@@ -124,6 +140,30 @@ $('#sendp').onclick = async () => {
   if (r.error) return toast(r.error, 4000);
   $('#paste').value = ''; tick();
 };
+
+// 引用追問：把原文帶進輸入框上方；只有這次勾選或 @ 點名的 AI 會收到
+function quoteIt(t, s, text, q) {
+  S.pref.quote = { text: String(text).slice(0, 4000), ai: s.ai, round: s.round, turnId: t.id, stepId: s.id || '' }; savePref(); renderExtras();
+  if (q) $('#q').value = q;
+  autosize(); $('#q').focus(); toast('已引用，輸入追問後送出；用 @ 點名可以只問特定 AI', 3000);
+}
+// 選取回答裡的文字：浮出「引用追問」與「請 X 查證」
+document.addEventListener('mouseup', e => {
+  const bar = $('#selbar'); if (bar.contains(e.target)) return;
+  setTimeout(() => {
+    const sel = getSelection(), txt = (sel.rangeCount ? sel.getRangeAt(0).toString() : '').trim(), card = sel.anchorNode && sel.anchorNode.parentElement?.closest('.card[data-step]');
+    if (!txt || !card || txt.length < 4) { bar.hidden = true; return; }
+    const r = sel.getRangeAt(0).getBoundingClientRect(), others = Object.keys(S.D.settings.ais).filter(k => k !== card.dataset.ai);
+    bar.innerHTML = '<button class="btn" data-sq>引用追問</button>' + others.map(k => `<button class="btn" data-sv="${k}">請 ${esc(ai(k).name)} 查證</button>`).join('');
+    bar.style.left = Math.max(8, Math.min(innerWidth - 430, r.left)) + 'px'; bar.style.top = Math.max(8, r.top - 50) + 'px'; bar.hidden = false;
+    bar.onclick = ev => {
+      const b = ev.target.closest('button'); if (!b) return;
+      const t = turnOf(card.dataset.turn), s = t.steps.find(x => x.id === card.dataset.step);
+      quoteIt(t, s, txt, b.dataset.sv ? `@${ai(b.dataset.sv).name} 請查證引用的這一段是否正確，必要時上網查詢並附上實際讀取的來源。` : undefined);
+      bar.hidden = true; sel.removeAllRanges();
+    };
+  }, 10);
+});
 
 /* ---------- 側欄與標題 ---------- */
 $('#proj').onchange = e => { S.pid = e.target.value; S.cid = null; load(); };
@@ -158,8 +198,8 @@ $('#aiset').onclick = openAISettings;
 $('#saveai').onclick = () => saveAI(true);
 $('#aicheck').onclick = () => { $('#dlgAI').close(); openSetup(); };
 $('#dataset').onclick = openData;
-bindSetup(load); bindData(load); bindProject(load);
-bindComposer({ onSend: sendQ, onPreview: () => openPreview(doSend), openAI: openAISettings });
+bindSetup(load); bindData(load); bindProject(load); bindBrief(() => { renderExtras(); refreshCheck(); }); bindMem(load); bindAnalyze(tick); bindMemList(load);
+bindComposer({ onSend: sendQ, onPreview: () => openPreview(doSend), openAI: openAISettings, openBrief });
 
 /* ---------- 深淺色 ---------- */
 function applyTheme() { document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); }

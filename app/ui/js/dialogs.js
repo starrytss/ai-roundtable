@@ -199,7 +199,86 @@ export async function openFiles() {
 
 /* ---------- 專案 ---------- */
 export function bindProject(reload) {
-  $('#projset').onclick = () => { const p = P() || {}; $('#pname').value = p.name || ''; $('#pinst').value = p.instructions || ''; $('#pmem').value = p.memory || ''; $('#dlgProj').showModal(); };
+  $('#projset').onclick = () => { const p = P() || {}; $('#pname').value = p.name || ''; $('#pinst').value = p.instructions || ''; $('#pmem').value = p.memory || ''; renderMemList(); $('#dlgProj').showModal(); };
   $('#savep').onclick = async () => { await api('/api/project/update', { pid: S.pid, name: $('#pname').value, instructions: $('#pinst').value, memory: $('#pmem').value }); $('#dlgProj').close(); await reload(); toast('專案已儲存'); };
   $('#delp').onclick = async () => { if (!confirm('刪除整個專案與其中所有對話？刪除前會自動備份。')) return; const r = await api('/api/project/delete', { pid: S.pid }); if (r.error) return toast(r.error); $('#dlgProj').close(); S.pid = null; reload(); };
+}
+
+/* ---------- 任務簡報 ---------- */
+export function openBrief() {
+  const F = S.D.briefFields, tpls = S.D.settings.briefTemplates || [], cur = S.pref.brief || { fields: {}, ask: F.map(([k]) => k), template: '' };
+  $('#briefBody').innerHTML = `<div class="row2"><select class="field" id="briefTpl"><option value="">選擇範本…</option>${tpls.map(t => `<option ${t.name === cur.template ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select><button class="btn" id="briefDel">刪除範本</button></div>
+    <div class="small">填寫的欄位會附在問題後面；勾選「沒填時請 AI 列出假設」的欄位如果空白，AI 會在回答開頭一次列出它的假設，不會各自追問。</div>
+    ${F.map(([k, l]) => `<label>${l}　<span class="small"><input type="checkbox" data-bask="${k}" ${(cur.ask || []).includes(k) ? 'checked' : ''}> 沒填時請 AI 列出假設</span></label><textarea class="field" data-bf="${k}" rows="${k === 'constraints' || k === 'format' ? 2 : 1}">${esc(cur.fields[k] || '')}</textarea>`).join('')}`;
+  const fill = t => { for (const [k] of F) document.querySelector(`[data-bf="${k}"]`).value = t.fields[k] || ''; for (const [k] of F) document.querySelector(`[data-bask="${k}"]`).checked = (t.ask || []).includes(k); };
+  $('#briefTpl').onchange = e => { const t = tpls.find(x => x.name === e.target.value); if (t) fill(t); };
+  $('#briefDel').onclick = async () => { const n = $('#briefTpl').value; if (!n || !confirm(`刪除範本「${n}」？`)) return; const r = await api('/api/briefs/delete', { name: n }); S.D.settings.briefTemplates = r.briefTemplates; openBrief(); };
+  if (!$('#dlgBrief').open) $('#dlgBrief').showModal();
+}
+const readBrief = () => ({ template: $('#briefTpl').value, fields: Object.fromEntries(S.D.briefFields.map(([k]) => [k, document.querySelector(`[data-bf="${k}"]`).value.trim()])), ask: S.D.briefFields.map(([k]) => k).filter(k => document.querySelector(`[data-bask="${k}"]`).checked) });
+export function bindBrief(after) {
+  $('#briefUse').onclick = () => { S.pref.brief = readBrief(); savePref(); $('#dlgBrief').close(); after(); };
+  $('#briefClear').onclick = () => { S.pref.brief = null; savePref(); $('#dlgBrief').close(); after(); };
+  $('#briefSave').onclick = async () => {
+    const n = prompt('範本名稱', $('#briefTpl').value || ''); if (!n) return;
+    const b = readBrief(), r = await api('/api/briefs/save', { name: n, fields: b.fields, ask: b.ask }); if (r.error) return toast(r.error);
+    S.D.settings.briefTemplates = r.briefTemplates; S.pref.brief = { ...b, template: n }; savePref(); toast('已儲存範本'); openBrief();
+  };
+}
+
+/* ---------- 加入專案記憶（分類、可編輯）---------- */
+let memSrc = null;
+export function openMem(text, source) {
+  memSrc = source;
+  $('#memBody').innerHTML = `<label>類型</label><select class="field" id="memType">${Object.entries(S.D.memLabels).map(([k, l]) => `<option value="${k}" ${k === 'decision' ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+    <label>內容　<span class="small">可以只留下重點；之後在「專案設定與記憶」可編輯、刪除或取代</span></label><textarea class="field" id="memText" rows="8">${esc(text)}</textarea>`;
+  $('#dlgMem').showModal();
+}
+export function bindMem(after) {
+  $('#memSave').onclick = async () => {
+    const r = await api('/api/memory/add', { pid: S.pid, type: $('#memType').value, text: $('#memText').value, source: memSrc });
+    if (r.error) return toast(r.error);
+    $('#dlgMem').close(); toast('已加入專案記憶'); after();
+  };
+}
+
+/* ---------- 整理共識與證據：選擇負責整理的 AI ---------- */
+let anTurn = null;
+export function openAnalyze(t) {
+  anTurn = t;
+  const opts = t.ids.filter(i => ai(i).mode === 'auto' || ai(i).mode === 'manual');
+  $('#anBody').innerHTML = `<div class="small">選一位參與過這場討論的 AI，請它只用文字整理共識、分歧與重要主張。它會收到所有 AI 的回答、總結，以及本程式記錄到的讀取網址。</div>
+    <label>負責整理的 AI</label><select class="field" id="anAi">${opts.map(i => `<option value="${i}">${esc(ai(i).name)}</option>`).join('')}</select>
+    <div class="small" style="margin-top:8px">「有讀取來源支持」只會出現在：來源網址確實有 AI 讀取過的紀錄。只附網址、沒有讀取紀錄的主張會標成「有引用但沒有讀取紀錄」。多數 AI 同意也不代表已查證。</div>`;
+  $('#dlgAnalyze').showModal();
+}
+export function bindAnalyze(after) {
+  $('#anGo').onclick = async () => {
+    const r = await api('/api/turn/analyze', { pid: S.pid, cid: S.cid, turnId: anTurn.id, ai: $('#anAi').value });
+    if (r.error) return toast(r.error, 4000);
+    $('#dlgAnalyze').close(); after();
+  };
+}
+
+/* ---------- 專案記憶清單（結構化）---------- */
+export function renderMemList() {
+  const p = P() || {}, L = S.D.memLabels, mems = (p.memories || []);
+  const active = mems.filter(m => m.status !== 'replaced'), old = mems.filter(m => m.status === 'replaced');
+  $('#memList').innerHTML = (active.length ? Object.entries(L).map(([k, l]) => { const xs = active.filter(m => m.type === k); return xs.length ? `<label>${esc(l)}</label>` + xs.map(m => `<div class="row2" data-mid="${m.id}"><textarea class="field" rows="2" data-mtext>${esc(m.text)}</textarea><div><select class="field" data-mtype>${Object.entries(L).map(([t, tl]) => `<option value="${t}" ${t === m.type ? 'selected' : ''}>${esc(tl.split('（')[0])}</option>`).join('')}</select>
+      <div class="small">${esc(m.date || '')}${m.source?.chat ? `　來自「${esc(m.source.chat)}」` : ''}${m.source?.ai ? `　${esc(ai(m.source.ai).name)}` : ''}${m.replaces ? '　取代舊版本' : ''}</div>
+      <button class="btn" data-msave>儲存</button><button class="btn" data-mreplace>以新內容取代</button><button class="btn" data-mdel style="color:var(--danger)">刪除</button></div></div>`).join('') : ''; }).join('') : '<div class="small">還沒有分類記憶。在結論下按「加入專案記憶」就會出現在這裡。</div>')
+    + (old.length ? `<details class="oldsum"><summary>已被取代的記憶（${old.length}）</summary>${old.map(m => `<div class="small">${esc(m.date || '')}　${esc(m.text)}</div>`).join('')}</details>` : '');
+}
+export function bindMemList(reload) {
+  $('#memList').onclick = async e => {
+    const row = e.target.closest('[data-mid]'); if (!row) return;
+    const id = row.dataset.mid, text = row.querySelector('[data-mtext]').value, type = row.querySelector('[data-mtype]').value;
+    let r;
+    if (e.target.matches('[data-msave]')) r = await api('/api/memory/update', { pid: S.pid, id, text, type });
+    else if (e.target.matches('[data-mreplace]')) r = await api('/api/memory/update', { pid: S.pid, id, text, type, replace: true });
+    else if (e.target.matches('[data-mdel]')) { if (!confirm('刪除這筆記憶？')) return; r = await api('/api/memory/delete', { pid: S.pid, id }); }
+    else return;
+    if (r.error) return toast(r.error);
+    const p = P(); if (p) p.memories = r.memories; renderMemList(); toast('已更新'); reload();
+  };
 }

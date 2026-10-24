@@ -12,6 +12,7 @@ const { workdirFor, resolveInside, listFiles } = require('./lib/workspace');
 const { BRIEF_FIELDS, MEM_LABEL } = require('./lib/context');
 
 const MEM_TYPES = Object.keys(MEM_LABEL);
+const localDate = () => new Date().toLocaleDateString('sv-SE');   // 本地日期 YYYY-MM-DD
 // 常用的任務簡報範本（使用者可另存自己的版本）
 const defaultBriefs = () => [
   { name: '活動企劃', fields: { goal: '', audience: '', budget: '', timeline: '', constraints: '', format: '活動提案：目標、流程、預算表、風險與備案' }, ask: ['goal', 'audience', 'budget', 'timeline'] },
@@ -19,7 +20,7 @@ const defaultBriefs = () => [
   { name: '供應商比較', fields: { goal: '', audience: '', budget: '', timeline: '', constraints: '', format: '比較表：價格、條件、風險，最後給建議' }, ask: ['goal', 'budget', 'constraints'] },
 ];
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const ROOT = path.resolve(__dirname, '..'), UI = path.join(__dirname, 'ui');
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const APP = process.argv.includes('--app');
@@ -136,7 +137,7 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
         if (!p || !String(b.text || '').trim()) throw new Error('沒有要加入的內容');
         if (!MEM_TYPES.includes(b.type)) { p.memory = (p.memory ? p.memory + '\n\n' : '') + String(b.text); store.save(); return; }
         const src = b.source || {}, c = findC(p, src.cid);
-        p.memories.push({ id: uid(), type: b.type, text: String(b.text).trim().slice(0, 4000), status: 'active', date: new Date().toISOString().slice(0, 10), at: Date.now(),
+        p.memories.push({ id: uid(), type: b.type, text: String(b.text).trim().slice(0, 4000), status: 'active', date: localDate(), at: Date.now(),
           source: { cid: c?.id || null, chat: c?.title || '', turnId: String(src.turnId || '').slice(0, 40), ai: String(src.ai || '').slice(0, 20) } });
         store.save(); return { memories: p.memories };
       }
@@ -144,7 +145,7 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
         const m = p && p.memories.find(x => x.id === b.id); if (!m) throw new Error('找不到這筆記憶');
         if (b.replace) {   // 取代：保留舊的並標為已取代，新增一筆記錄取代關係
           m.status = 'replaced';
-          p.memories.push({ ...m, id: uid(), text: String(b.text || m.text).trim().slice(0, 4000), type: MEM_TYPES.includes(b.type) ? b.type : m.type, status: 'active', replaces: m.id, date: new Date().toISOString().slice(0, 10), at: Date.now() });
+          p.memories.push({ ...m, id: uid(), text: String(b.text || m.text).trim().slice(0, 4000), type: MEM_TYPES.includes(b.type) ? b.type : m.type, status: 'active', replaces: m.id, date: localDate(), at: Date.now() });
         } else { if (typeof b.text === 'string') m.text = b.text.trim().slice(0, 4000); if (MEM_TYPES.includes(b.type)) m.type = b.type; m.updatedAt = Date.now(); }
         store.save(); return { memories: p.memories };
       }

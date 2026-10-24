@@ -283,3 +283,10 @@ code.inline { font:12px var(--mono); background:var(--sunk); padding:1px 5px; bo
 .btn { white-space:nowrap; }
 dialog .df { flex-wrap:wrap; align-items:center; }
 #pvFoot { flex:1 1 260px; }
+
+#selbar { position:fixed; z-index:8; display:flex; gap:6px; flex-wrap:wrap; max-width:430px; padding:6px; background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.18); }
+#selbar[hidden] { display:none; }
+#extras { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+#extras:empty { display:none; }
+#pausewrap { display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
+#pausewrap[hidden] { display:none; }

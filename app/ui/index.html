@@ -44,10 +44,13 @@
     <div class="composer">
       <div id="skpop" hidden></div>
       <div id="skchips"></div>
+      <div id="extras"></div>
       <div class="qwrap"><div id="qhl" aria-hidden="true"></div><textarea id="q" rows="2" placeholder="向圓桌會議提問…輸入 $ 或 / 可以叫出技能" aria-label="問題"></textarea></div>
       <div class="bar">
         <span id="ais"></span>
         <button class="sel" id="skbtn" title="瀏覽已安裝的技能">⚡ 技能</button>
+        <button class="sel" id="briefbtn" title="任務簡報：目標、對象、預算、時程">📋 簡報</button>
+        <label class="sel" id="pausewrap" title="每輪結束後先停下，讓你補充、略過某位 AI 或直接總結"><input type="checkbox" id="pause"> 每輪後暫停</label>
         <span class="grow"></span>
         <select id="mode" class="sel" title="討論模式">
           <option value="discuss">一般討論</option><option value="debate">正反辯論</option>
@@ -69,8 +72,10 @@
     <label>專案名稱</label><input id="pname" class="field">
     <label>專案說明　<span class="small">預設會附在每次提問，送出前可以取消</span></label>
     <textarea id="pinst" class="field" rows="4" placeholder="例如：我在做手機小遊戲，預算有限，一個人開發"></textarea>
-    <label>專案記憶　<span class="small">這個專案所有對話共用，可在結論下按「加入專案記憶」</span></label>
-    <textarea id="pmem" class="field" rows="9"></textarea>
+    <label>自由記事　<span class="small">這個專案所有對話共用的補充說明</span></label>
+    <textarea id="pmem" class="field" rows="5"></textarea>
+    <label>分類記憶　<span class="small">偏好、已確認的決策、待查證、未採用的建議；會依類型告訴 AI</span></label>
+    <div id="memList"></div>
   </div>
   <div class="df"><button class="btn" id="delp" style="color:var(--danger)">刪除專案</button><span class="grow"></span><button class="btn" data-close>取消</button><button class="btn gold" id="savep">儲存</button></div>
 </dialog>
@@ -111,4 +116,22 @@
   <div class="db" id="filesBody"></div>
   <div class="df"><button class="btn" id="filesOpen">在檔案總管開啟</button><span class="grow"></span><button class="btn" data-close>關閉</button></div>
 </dialog>
+<dialog id="dlgBrief">
+  <div class="dh"><span>任務簡報</span><button class="icon" data-close>✕</button></div>
+  <div class="db" id="briefBody"></div>
+  <div class="df"><button class="btn" id="briefSave">另存成範本</button><button class="btn" id="briefClear">清除</button><span class="grow"></span><button class="btn" data-close>取消</button><button class="btn gold" id="briefUse">套用到這次提問</button></div>
+</dialog>
+
+<dialog id="dlgMem">
+  <div class="dh"><span>加入專案記憶</span><button class="icon" data-close>✕</button></div>
+  <div class="db" id="memBody"></div>
+  <div class="df"><span class="grow"></span><button class="btn" data-close>取消</button><button class="btn gold" id="memSave">加入</button></div>
+</dialog>
+
+<dialog id="dlgAnalyze">
+  <div class="dh"><span>整理共識與證據</span><button class="icon" data-close>✕</button></div>
+  <div class="db" id="anBody"></div>
+  <div class="df"><span class="grow"></span><button class="btn" data-close>取消</button><button class="btn gold" id="anGo">開始整理</button></div>
+</dialog>
+<div id="selbar" hidden></div>
 <div id="toast" role="status"></div>

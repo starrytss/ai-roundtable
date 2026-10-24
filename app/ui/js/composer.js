@@ -2,10 +2,21 @@
 import { $, S, api, esc, ai, av, col, toast, savePref, badge } from './core.js';
 
 const keys = () => Object.keys(S.D.settings.ais);
+// @Claude、@ChatGPT：只傳給被點名的 AI（這次提問暫時取代上方勾選）
+export function mentioned(q = $('#q').value) {
+  const ais = S.D.settings.ais, out = [];
+  for (const m of String(q).matchAll(/@([^\s@，。、,:：！？!?]+)/g)) {
+    const k = Object.keys(ais).find(id => id.toLowerCase() === m[1].toLowerCase() || (ais[id].name || '').toLowerCase() === m[1].toLowerCase());
+    if (k && !out.includes(k)) out.push(k);
+  }
+  return out;
+}
 export function req(extra = {}) {
-  const p = S.pref;
-  return { pid: S.pid, cid: S.cid, q: $('#q').value.trim(), ids: p.ids, mode: $('#mode').value, rounds: +$('#rounds').value, mod: $('#mod').value,
-    modOutside: !!p.modOutside, include: p.include || {}, redact: p.redact ?? S.D.settings.privacy.redact, ...extra };
+  const p = S.pref, men = mentioned(), ids = men.length ? men : p.ids;
+  const mod = men.length ? (men.includes(p.mod) ? p.mod : men[0]) : $('#mod').value;
+  return { pid: S.pid, cid: S.cid, q: $('#q').value.trim(), ids, mode: $('#mode').value, rounds: +$('#rounds').value, mod,
+    modOutside: men.length ? false : !!p.modOutside, include: p.include || {}, redact: p.redact ?? S.D.settings.privacy.redact,
+    pause: !!p.pause, quote: p.quote || null, brief: p.brief || null, ...extra };
 }
 
 export function renderComposer() {
@@ -24,7 +35,19 @@ export function renderComposer() {
   $('#mode').value = p.mode || 'discuss'; $('#rounds').value = p.rounds || '2';
   const solo = p.ids.length < 2;
   $('#rounds').disabled = $('#mod').disabled = $('#mode').disabled = solo;
-  refreshCheck();
+  $('#pause').checked = !!p.pause; $('#pausewrap').hidden = solo;
+  renderExtras(); refreshCheck();
+}
+
+// 輸入框上方的附加項目：引用的內容、任務簡報
+export function renderExtras() {
+  const p = S.pref, chips = [];
+  if (p.quote) chips.push(`<span class="skchip url" title="${esc(p.quote.text)}"><span class="ic">❝</span><b>引用 ${esc(ai(p.quote.ai).name)}${p.quote.round ? ` 第 ${p.quote.round} 輪` : ''}</b><small>${esc(p.quote.text.slice(0, 40))}${p.quote.text.length > 40 ? '…' : ''}</small><button data-rmquote title="移除引用">✕</button></span>`);
+  if (p.brief) {
+    const F = S.D.briefFields || [], filled = F.filter(([k]) => String(p.brief.fields[k] || '').trim()).length, miss = F.filter(([k]) => !String(p.brief.fields[k] || '').trim() && (p.brief.ask || []).includes(k));
+    chips.push(`<span class="skchip"><b>📋 ${esc(p.brief.template || '任務簡報')}</b><small>已填 ${filled} 項${miss.length ? `　·　缺：${miss.map(([, l]) => esc(l)).join('、')}` : ''}</small><button data-editbrief title="編輯">✎</button><button data-rmbrief title="移除簡報">✕</button></span>`);
+  }
+  $('#extras').innerHTML = chips.join('');
 }
 
 // 送出前檢查列：參與者、主持人、預計呼叫次數、問題（例如主持人未勾選、需要確認）
@@ -38,9 +61,10 @@ async function doCheck() {
   if (pv.error) { box.innerHTML = `<span class="warn">${esc(pv.error)}</span>`; lastPreview = null; return; }
   lastPreview = pv;
   const people = pv.recipients.map(x => `<span class="rcp">${av(x.ai)}<b>${esc(x.name)}</b>${x.outside ? '<span class="mtag">只主持</span>' : ''}${badge(x.guarantee)}</span>`).join('');
-  const e = pv.estimate;
-  let h = `<span>傳送給：</span>${people}<span>· 預計 <b>${e.total}</b> 次 CLI 呼叫${e.manual ? `（其中手動貼上 ${e.manual} 次）` : ''}</span>`
+  const e = pv.estimate, men = mentioned();
+  let h = `<span>${men.length ? '只傳給（@點名）：' : '傳送給：'}</span>${people}<span>· 預計 <b>${e.total}</b> 次 CLI 呼叫${e.manual ? `（其中手動貼上 ${e.manual} 次）` : ''}</span>`
     + `<span class="lnk" data-preview>查看傳送內容</span>`;
+  h += `<span class="mtag">${usageText(pv.recipients.filter(x => x.mode === 'auto').map(x => x.ai))}</span>`;
   if (pv.redact) h += '<span class="mtag">送出前遮蔽敏感資訊：開啟</span>';
   if (pv.recipients.some(x => x.argvPrompt)) h += '<span class="warn">注意：有 AI 只能把提示放在命令列參數，電腦上的其他程式可能看得到。</span>';
   if (pv.problem) {
@@ -52,7 +76,24 @@ async function doCheck() {
   box.innerHTML = h;
 }
 
-export function bindComposer({ onSend, onPreview, openAI }) {
+// 用量：只顯示 CLI 自己回報的資訊（目前只有 Claude Code 會回報 5 小時用量比例），其他標示未知
+export function usageText(ids) {
+  const u = S.D.settings.usage || {};
+  return ids.map(id => {
+    const r = u[id]?.rateLimit, w = r?.unifiedWindows?.[r.rateLimitType] || r;
+    if (w && typeof w.utilization === 'number') return `${esc(ai(id).name)} 用量約 ${Math.round(w.utilization * 100)}%（CLI 回報，${new Date(u[id].at).toLocaleTimeString().slice(0, 5)}）`;
+    return `${esc(ai(id).name)} 用量：未知`;
+  }).join('　');
+}
+
+export function bindComposer({ onSend, onPreview, openAI, openBrief }) {
+  $('#pause').onchange = e => { S.pref.pause = e.target.checked; savePref(); };
+  $('#briefbtn').onclick = openBrief;
+  $('#extras').onclick = e => {
+    if (e.target.closest('[data-rmquote]')) { S.pref.quote = null; savePref(); renderExtras(); return refreshCheck(); }
+    if (e.target.closest('[data-rmbrief]')) { S.pref.brief = null; savePref(); renderExtras(); return refreshCheck(); }
+    if (e.target.closest('[data-editbrief]')) return openBrief();
+  };
   $('#ais').onclick = e => {
     const b = e.target.closest('[data-ai]'); if (!b) return;
     const k = b.dataset.ai, p = S.pref;

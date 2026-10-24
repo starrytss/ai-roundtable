@@ -36,7 +36,7 @@ function card(t, s, extra = '') {
     if (e.action === 'login' || e.action === 'install' || e.action === 'update') btns.push(`<button class="btn" data-setup>開啟連線檢查</button>`);
     return `<div class="card err" style="--c:${col(s.ai)}">${head}</div><div class="bd">${label}：${esc(e.text || '')}</div>${meta(s)}${btns.length ? `<div class="acts2">${btns.join('')}</div>` : ''}</div>`;
   }
-  return `<div class="card" style="--c:${col(s.ai)}">${head}<button class="cp" data-copytext="${esc(key)}">複製</button></div>
+  return `<div class="card" id="step-${s.id}" data-step="${s.id}" data-turn="${t.id}" data-ai="${s.ai}" data-round="${s.round ?? ''}" style="--c:${col(s.ai)}">${head}<button class="cp" data-quote="${s.id}" data-turn="${t.id}" title="引用這則回答追問">追問</button><button class="cp" data-copytext="${esc(key)}">複製</button></div>
     ${s.stale ? '<div class="meta2 stale">這是在其他 AI 重試之前產生的回答，參考的上一輪內容已不同。</div>' : ''}
     <div class="bd md ${long && !open ? 'clamp' : ''}">${md(s.text)}</div>
     ${long ? `<button class="more" data-exp="${esc(key)}">${open ? '收合' : '展開全文'}</button>` : ''}${sources(s)}${meta(s)}</div>`;
@@ -50,9 +50,39 @@ function busyCard(b) {
     <div class="bd"><span class="dots"><span></span><span></span><span></span></span>${typeof prog === 'string' && !prog.startsWith('<') ? esc(prog) : prog}</div></div>`;
 }
 
+// 每輪後介入：補充、略過下一輪某位 AI、繼續、自動跑完、直接總結、停在這裡
+function interveneBlock(t) {
+  const next = t.waitingAfter + 1, nextIds = live(t).filter(s => s.kind === 'answer' && s.round === next && s.status === 'pending').map(s => s.ai);
+  return `<div class="notice" data-intervene="${t.id}"><b>第 ${t.waitingAfter} 輪結束，等你決定下一步</b>
+    <textarea class="field" data-inote rows="2" style="width:100%;margin-top:6px" placeholder="補充限制或指示（之後的輪次與總結都會收到）"></textarea>
+    ${nextIds.length ? `<div class="row2"><span class="small">第 ${next} 輪略過：</span>${nextIds.map(i => `<label class="sk"><input type="checkbox" data-iskip="${i}"> ${esc(ai(i).name)}</label>`).join('')}</div>` : ''}
+    <div class="tools">${nextIds.length ? '<button class="btn gold" data-iact="continue">繼續下一輪</button><button class="btn" data-iact="auto">不再暫停 自動跑完</button>' : '<button class="btn gold" data-iact="continue">開始總結</button>'}
+    ${nextIds.length && t.ids.length > 1 ? '<button class="btn" data-iact="summarize">直接總結</button>' : ''}<button class="btn" data-iact="stop">停在這裡</button></div></div>`;
+}
+
+// 共識、分歧與證據：狀態只依本程式核對過的讀取紀錄，不因為附了網址就算查證
+const CLAIM = { supported: ['done', '有讀取來源支持'], cited: ['partial', '有引用但沒有讀取紀錄'], inference: ['waiting', '只有 AI 推論'], conflict: ['failed', '來源互相矛盾'], unverified: ['interrupted', '尚未查證'] };
+function analysisBlock(t) {
+  const step = live(t).filter(s => s.kind === 'analysis').pop();
+  if (!step) return '';
+  if (step.status === 'error') return `<div class="notice bad">整理失敗：${esc(step.error?.text || '')}</div>`;
+  const a = t.analysis; if (!a || step.status !== 'ok') return '';
+  if (a.error) return `<details class="sec"><summary>共識與證據（由 ${esc(ai(step.ai).name)} 整理）<span class="who">${esc(a.error)}</span></summary><pre>${esc(a.raw || '')}</pre></details>`;
+  const by = xs => (xs || []).map(esc).join('、');
+  const list = (title, items, fn) => items.length ? `<label>${title}</label><ul class="reasons">${items.map(fn).join('')}</ul>` : '';
+  return `<details class="sec" open><summary>共識與證據<span class="who">由 ${esc(ai(step.ai).name)} 整理 · ${when(a.at)} · 共識不代表事實已查證</span></summary><div class="db">
+    ${list('共識', a.consensus, x => `<li>${esc(x.point)}<span class="mtag">${by(x.by)}${x.reason ? '：' + esc(x.reason) : ''}</span></li>`)}
+    ${list('分歧', a.disagreements, x => `<li>${esc(x.point)}<ul class="notes">${x.positions.map(p => `<li>${esc(p.by)}：${esc(p.stance)}${p.reason ? `（${esc(p.reason)}）` : ''}</li>`).join('')}</ul></li>`)}
+    ${a.claims.length ? `<label>主張與證據</label>${a.claims.map((c, i) => { const [cls, lab] = CLAIM[c.status] || CLAIM.unverified; return `<div class="row2" style="align-items:flex-start"><span class="st ${cls}" style="font-size:11.5px;white-space:nowrap">${lab}</span><div style="flex:1">${esc(c.claim)}<div class="small">${c.by.length ? by(c.by) + '　' : ''}${c.sources.map(u => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>${c.readHits.includes(u) ? '（有讀取紀錄）' : ''}`).join('、')}${c.check ? `<br>${esc(c.check)}` : ''}${c.note ? `<br>${esc(c.note)}` : ''}</div></div><button class="btn" data-verify="${i}" data-turn="${t.id}">指定查證</button></div>`; }).join('')}` : ''}
+    ${list('還需要查證', a.toVerify, x => `<li>${esc(x)}</li>`)}${list('需要你決定', a.toDecide, x => `<li>${esc(x)}</li>`)}
+    ${a.sources.length ? `<label>實際讀取過的來源（CLI 工具紀錄）</label><ul class="notes">${a.sources.map(x => `<li><a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.url)}</a>　${esc(ai(x.ai).name)} · ${x.at ? new Date(x.at).toLocaleTimeString().slice(0, 5) : ''}</li>`).join('')}</ul>` : '<div class="small">這場討論沒有任何讀取網頁的紀錄。</div>'}
+  </div></details>`;
+}
+
 function statusBlock(t, last, running) {
   if (running) return '';
-  const L = live(t), failed = L.filter(s => s.kind === 'answer' && ['error', 'stopped', 'skipped'].includes(s.status));
+  if (t.status === 'waiting' && t.waitingAfter && !S.run) return interveneBlock(t);
+  const L = live(t), failed = L.filter(s => s.kind === 'answer' && !s.userSkipped && ['error', 'stopped', 'skipped'].includes(s.status));
   const okAns = L.some(s => s.kind === 'answer' && s.status === 'ok'), sum = L.filter(s => s.kind === 'summary').pop();
   const btn = [];
   if (failed.length && !S.run) btn.push(`<button class="btn gold" data-retryall="${t.id}">重試失敗的 AI（${failed.length}）</button>`);
@@ -60,6 +90,7 @@ function statusBlock(t, last, running) {
   if (['interrupted', 'stopped', 'waiting'].includes(t.status) && L.some(s => ['pending', 'interrupted'].includes(s.status)) && !S.run) btn.push(`<button class="btn" data-resume="${t.id}">續跑未完成的步驟</button>`);
   if (last && t.ids.length > 1 && ['done', 'partial'].includes(t.status) && !S.run) btn.push(`<button class="btn" data-more="${t.id}">再討論一輪</button>`);
   if (t.summary) btn.push(`<button class="btn" data-mem="${t.id}">＋ 加入專案記憶</button><button class="btn" data-copysum="${t.id}">複製結論</button>`);
+  if (okAns && t.ids.length > 1 && !S.run) btn.push(`<button class="btn" data-analyze="${t.id}">整理共識與證據</button>`);
   btn.push(`<button class="btn" data-reask="${t.id}">重新提問</button>`);
   const reasons = (t.reasons || []).filter(r => !['stopped', 'interrupted'].includes(r.code) || t.status !== r.code);
   return `<div class="tstatus"><span class="st ${t.status}">${STATUS[t.status] || esc(t.status)}</span>${t.status === 'interrupted' ? '<span class="small">程式在討論中被關閉，已完成的回答都保留了。</span>' : ''}</div>
@@ -91,6 +122,8 @@ export function renderChat() {
     const who = t.ids.map(i => esc(ai(i).name)).join('、') + (solo ? '' : `　主持：${esc(ai(t.mod).name)}${t.modOutside ? '（未參與但收到內容）' : ''}`);
     let h = `<div class="turn"><div class="ask"><div class="bubble">${richQ(t.q)}</div><div class="meta">
       ${solo ? '' : `<span class="chip">${M.name}</span><span class="chip">${t.rounds} 輪</span>`}${t.redact ? '<span class="chip">已開啟遮蔽</span>' : ''}<span>傳給：${who}</span> · ${when(t.at)}</div>
+      ${t.quote ? `<blockquote class="small" style="margin:4px 0 0;max-width:min(720px,88%)">引用 ${esc(ai(t.quote.ai).name)}${t.quote.round ? ` 第 ${t.quote.round} 輪` : ''}：${esc(t.quote.text.slice(0, 160))}${t.quote.text.length > 160 ? '…' : ''}${t.quote.stepId ? ` <span class="lnk" data-goto="${esc(t.quote.stepId)}">跳到原文</span>` : ''}</blockquote>` : ''}
+      ${t.brief ? `<div class="small">📋 ${esc(t.brief.template || '任務簡報')}：${Object.entries(t.brief.fields).filter(([, v]) => v).map(([k, v]) => `${esc((S.D.briefFields.find(f => f[0] === k) || [k, k])[1])} ${esc(v.slice(0, 40))}`).join('　')}</div>` : ''}
       ${(t.notes || []).length ? `<ul class="notes">${t.notes.map(n => `<li>補充${n.round ? `（第 ${n.round} 輪後）` : ''}：${esc(n.text)}</li>`).join('')}</ul>` : ''}</div>`;
     const answers = r => L.filter(s => s.kind === 'answer' && s.round === r && !busyIds.has(s.id) && s.status !== 'pending').sort((x, y) => t.ids.indexOf(x.ai) - t.ids.indexOf(y.ai));
     if (solo) h += `<div class="grid" style="grid-template-columns:1fr">${answers(1).map(s => card(t, s)).join('')}${busy.map(busyCard).join('')}</div>`;
@@ -109,7 +142,9 @@ export function renderChat() {
       else if (hasSum) { texts[sum.id] = sum.text; h += `<div class="summary"><div class="hd"><span class="seal">結　論</span><span class="small">主持人 ${esc(ai(sum.ai).name)}${sum.ms ? ' · ' + secs(sum.ms) : ''}</span></div><div class="bd md">${md(sum.text)}</div>${sources(sum)}</div>`; }
       else if (sum && sum.status !== 'pending') h += card(t, sum, '<span class="small">（總結）</span>');
     }
-    h += statusBlock(t, last, running);
+    const ab = busy.find(b => b.kind === 'analysis');
+    if (ab) h += `<div class="small" style="margin-top:10px">${esc(ai(ab.ai).name)} 正在整理共識與證據… <span data-since="${ab.since}"></span></div>`;
+    h += analysisBlock(t) + statusBlock(t, last, running);
     return h + '</div>';
   }).join('');
   if (atBottom) log.scrollTop = log.scrollHeight;
