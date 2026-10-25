@@ -1,6 +1,6 @@
 {
   "name": "ai-roundtable",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "AI圓桌會議：讓 ChatGPT、Claude、Gemini、Grok 透過官方命令列工具一起開會的 Windows 桌面程式",
   "license": "MIT",

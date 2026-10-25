@@ -12,7 +12,7 @@
 ## 下載與安裝
 
 1. 到 [**Releases**](https://github.com/starrytss/ai-roundtable/releases/latest) 打開最新版本
-2. 在版本說明下方的 **Assets**（收合時請點開）點選 **`AI_Roundtable_Setup_v1.4.0.zip`**
+2. 在版本說明下方的 **Assets**（收合時請點開）點選 **`AI_Roundtable_Setup_v1.5.0.zip`**
    - 一般使用者**不需要**下載 `Source code (zip)` 或 `Source code (tar.gz)`，那是給開發者的原始碼
 3. 在下載的 zip 上按右鍵 →「解壓縮全部」，不要直接在壓縮檔裡執行
 4. 雙擊資料夾裡的 **`Setup.bat`**
@@ -23,7 +23,7 @@
 **檢查檔案（選用）**：每個版本的 Assets 都附有 `SHA256SUMS.txt`。在 PowerShell 執行下面的指令，結果應該和檔案裡的值相同。
 
 ```powershell
-Get-FileHash .\AI_Roundtable_Setup_v1.4.0.zip
+Get-FileHash .\AI_Roundtable_Setup_v1.5.0.zip
 ```
 
 **從舊版升級**：直接下載新版並執行 `Setup.bat`，對話與設定會保留。v1.0 的明文 `data.json` 會在第一次開啟時自動轉移並加密，舊檔保留給你決定是否刪除。
@@ -46,6 +46,7 @@ Get-FileHash .\AI_Roundtable_Setup_v1.4.0.zip
 ## 功能
 
 - **多 AI 討論**：勾選要參與的 AI，設定輪數與主持人；勾一位就是一般聊天
+- **這個對話的分工**：為每位 AI 指定這次的職務，大家同時往不同方向研究，最後由主持人整合；可存成研究團隊範本，同一家 AI 也能多坐一席負責另一個方向
 - **送出前檢查**：列出每一位接收者與預計呼叫次數，可以逐項查看並取消要傳送的內容
 - **每輪後暫停與追問**：補充限制、略過某位 AI、`@點名` 追問、引用回答文字請另一位 AI 查證
 - **整理共識與證據**：列出共識、分歧與重要主張；只有真的讀取過來源的主張才標成「有讀取來源支持」
@@ -69,6 +70,7 @@ Get-FileHash .\AI_Roundtable_Setup_v1.4.0.zip
 
 | 版本 | 日期 | 重點 |
 | --- | --- | --- |
+| [v1.5.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.5.0) | 2026-10-25 | 這個對話的分工：每位 AI 負責不同方向、主持人整合；研究團隊範本；同一家 AI 多席各負責一個方向 |
 | [v1.4.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.4.0) | 2026-10-25 | 圖片與設計稿、模型選擇與新增席位、本機全文搜尋／標籤／收藏、任務佇列、匿名比較、收斂提示與時間上限 |
 | [v1.3.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.3.0) | 2026-10-25 | 分工接力、共用資料區、成果範本與成果檔、檔案面板、版本比較與採納紀錄、討論分支 |
 | [v1.2.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.2.0) | 2026-10-25 | 每輪後暫停、`@點名` 追問與引用查證、共識與證據整理、任務簡報、分類記憶、用量顯示 |
