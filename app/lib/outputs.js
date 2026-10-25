@@ -40,7 +40,7 @@ function saveOutput({ workdir, chat, name, format = 'md', text, from = {}, templ
   if (content == null) throw new Error('內容裡沒有表格，無法轉成 CSV');
   const base = slug(name);
   chat.outputs = chat.outputs || [];
-  const version = 1 + Math.max(0, ...chat.outputs.filter(o => o.base === base).map(o => o.version));
+  const version = 1 + Math.max(0, ...chat.outputs.filter(o => o.base === base && o.format === format).map(o => o.version));   // 每種格式各自編號
   const rel = path.join('outputs', `${base}-v${version}${FORMATS[format]}`);
   fs.mkdirSync(path.join(workdir, 'outputs'), { recursive: true });
   const file = resolveInside(workdir, rel);

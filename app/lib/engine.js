@@ -237,7 +237,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
   // 再討論一輪：新增一輪回答並重做總結
   function more({ pid, cid, turnId }) {
     const { p, c, t } = find(pid, cid, turnId);
-    if (!t || t.ids.length < 2) throw err('input', '只有多個 AI 的討論才能再加一輪');
+    if (!t || t.ids.length < 2 || t.mode === 'relay') throw err('input', '只有多個 AI 的討論才能再加一輪（分工接力請用退回修改或建立分支）');
     const est = estimate({ ...t, solo: false, rounds: 1 });
     if (est.auto > S().limits.maxCalls) throw err('limit', '超過呼叫上限');
     t.rounds += 1;

@@ -18,7 +18,7 @@ function branchChat({ project, chat, turnId, round, title, uid }) {
   Object.assign(base, computeStatus(base));
   const c = { id: uid(), title: String(title || `${chat.title}（分支）`).slice(0, 60), updated: Date.now(),
     turns: [...chat.turns.slice(0, idx).map(clone), base], outputs: clone(chat.outputs || []), decisions: clone(chat.decisions || []),
-    branchOf: { cid: chat.id, title: chat.title, turnId, round: r, at: Date.now() } };
+    branchOf: { cid: chat.id, title: chat.title, turnId, round: r, unit: src.mode === 'relay' ? '棒' : '輪', at: Date.now() } };
   project.chats.push(c);
   return c;
 }

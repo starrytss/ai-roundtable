@@ -248,7 +248,7 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
         const st = b.stepId ? t.steps.find(x => x.id === b.stepId && x.status === 'ok') : null, text = st ? st.text : t.summary;
         if (!text) throw new Error('這場討論還沒有可以輸出的結論');
         const rec = outputs.saveOutput({ workdir: workdirFor(paths.workRoot, p.id, c.id), chat: c, name: String(b.name || t.q.slice(0, 30)), format: b.format, text,
-          from: { turnId: t.id, stepId: st ? st.id : '', ai: st ? st.ai : (t.steps.filter(x => x.kind === 'summary' && x.status === 'ok' && !x.superseded).pop() || {}).ai, kind: st ? st.kind : 'summary' }, template: t.outputTemplate || '' });
+          from: { turnId: t.id, stepId: st ? st.id : '', ai: st ? st.ai : (t.steps.filter(x => ['summary', 'stage'].includes(x.kind) && x.status === 'ok' && !x.superseded).sort((x, y) => (x.round || 99) - (y.round || 99)).pop() || {}).ai, kind: st ? st.kind : t.mode === 'relay' ? 'stage' : 'summary' }, template: t.outputTemplate || '' });
         c.updated = Date.now(); store.save(); const { text: _t, ...o } = rec; return { output: o };
       }
       case '/api/outputs/restore': {   // 回到先前版本：把舊版內容存成新的版本，不刪除任何版本

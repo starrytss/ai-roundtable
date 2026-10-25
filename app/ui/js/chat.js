@@ -98,7 +98,7 @@ function statusBlock(t, last, running) {
   if (failed.length && !S.run) btn.push(`<button class="btn gold" data-retryall="${t.id}">重試失敗的 AI（${failed.length}）</button>`);
   if (t.ids.length > 1 && okAns && (!sum || sum.status !== 'ok') && !S.run) btn.push(`<button class="btn" data-resum="${t.id}">只重做主持人總結</button>`);
   if (['interrupted', 'stopped'].includes(t.status) && L.some(s => ['pending', 'interrupted'].includes(s.status)) && !S.run) btn.push(`<button class="btn" data-resume="${t.id}">續跑未完成的步驟</button>`);
-  if (last && t.ids.length > 1 && ['done', 'partial'].includes(t.status) && !S.run) btn.push(`<button class="btn" data-more="${t.id}">再討論一輪</button>`);
+  if (last && t.ids.length > 1 && t.mode !== 'relay' && ['done', 'partial'].includes(t.status) && !S.run) btn.push(`<button class="btn" data-more="${t.id}">再討論一輪</button>`);
   if (t.summary) btn.push(`<button class="btn" data-mem="${t.id}">＋ 加入專案記憶</button><button class="btn" data-copysum="${t.id}">複製結論</button>`);
   if (okAns && t.ids.length > 1 && !S.run) btn.push(`<button class="btn" data-analyze="${t.id}">整理共識與證據</button>`);
   if (t.summary && !S.run) btn.push(`<button class="btn" data-outfile="${t.id}">產生檔案</button>`);
@@ -128,12 +128,12 @@ export function renderChat() {
   $('#title').textContent = chat.title;
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 160;
   const run = S.run && S.run.pid === S.pid && S.run.cid === S.cid ? S.run : null;
-  const branchNote = chat.branchOf ? `<div class="branchnote">↳ 分支自「<span class="lnk" data-gochat="${chat.branchOf.cid}">${esc(chat.branchOf.title)}</span>」第 ${chat.branchOf.round} 輪之後；之後的討論只在這個分支，不會影響原本的對話。</div>` : '';
+  const branchNote = chat.branchOf ? `<div class="branchnote">↳ 分支自「<span class="lnk" data-gochat="${chat.branchOf.cid}">${esc(chat.branchOf.title)}</span>」第 ${chat.branchOf.round} ${chat.branchOf.unit || '輪'}之後；之後的討論只在這個分支，不會影響原本的對話。</div>` : '';
   box.innerHTML = branchNote + chat.turns.map((t, ti) => {
     if (!t.steps) return '';
     const last = ti === chat.turns.length - 1, running = run && run.turnId === t.id, M = MODES[t.mode] || MODES.discuss, solo = t.ids.length === 1;
     const busy = running ? run.busy : [], L = live(t), busyIds = new Set(busy.map(b => b.stepId));
-    const who = t.ids.map(i => esc(ai(i).name)).join('、') + (solo ? '' : `　主持：${esc(ai(t.mod).name)}${t.modOutside ? '（未參與但收到內容）' : ''}`);
+    const who = t.ids.map(i => esc(ai(i).name)).join('、') + (solo || t.mode === 'relay' ? '' : `　主持：${esc(ai(t.mod).name)}${t.modOutside ? '（未參與但收到內容）' : ''}`);
     let h = `<div class="turn"><div class="ask"><div class="bubble">${richQ(t.q)}</div><div class="meta">
       ${t.mode === 'relay' ? `<span class="chip">分工接力</span><span class="chip">${(t.stages || []).length} 棒</span>` : solo ? '' : `<span class="chip">${M.name}</span><span class="chip">${t.rounds} 輪</span>`}${t.branchBase ? `<span class="chip">分支起點：第 ${t.branchBase.round} ${t.mode === 'relay' ? '棒' : '輪'}</span>` : ''}${t.redact ? '<span class="chip">已開啟遮蔽</span>' : ''}<span>傳給：${who}</span> · ${when(t.at)}</div>
       ${t.quote ? `<blockquote class="small" style="margin:4px 0 0;max-width:min(720px,88%)">引用 ${esc(ai(t.quote.ai).name)}${t.quote.round ? ` 第 ${t.quote.round} 輪` : ''}：${esc(t.quote.text.slice(0, 160))}${t.quote.text.length > 160 ? '…' : ''}${t.quote.stepId ? ` <span class="lnk" data-goto="${esc(t.quote.stepId)}">跳到原文</span>` : ''}</blockquote>` : ''}
