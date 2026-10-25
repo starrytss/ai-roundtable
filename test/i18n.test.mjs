@@ -56,7 +56,7 @@ test('English prompts contain no Chinese for answers, team summary, relay, analy
   const project = { instructions: 'Be brief', memories: [{ type: 'decision', text: 'Use Taipei', status: 'active' }], materials: [{ id: 'm', title: 'Notes', kind: 'text', text: 'abc', share: 'all' }] };
   const r2 = buildPayload({ project, chat: { turns: [] }, turn, ai, aiId: 'claude', names, round: 2 });
   assert.match(r2.prompt, /You are taking part in a multi-AI discussion/);
-  assert.match(r2.prompt, /Answer in the language the user used/);
+  assert.match(r2.prompt, /Write your reply in the same language the user used in \[This question\] above\.[^\n]*$/, 'the reply-language rule is the last line');
   assert.match(r2.prompt, /Your role in this chat: Market/);
   assert.match(r2.prompt, /\[ChatGPT \(Risk\)\]\nLegal risk/);
   assert.match(r2.prompt, /This is round 2\./);

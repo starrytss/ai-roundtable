@@ -51,7 +51,7 @@ const ZH = {
   },
   levelLabel: LEVEL_LABEL,
   perm: (label, can) => `權限：${label}。${can}`,
-  intro: perm => `你正在參與一個多 AI 討論（AI圓桌會議）。${perm}回答要具體、有條理，不要客套。沒有讀到的網頁或沒查到的資料請直接說明，不要假裝讀過。請用使用者提問所用的語言回答。`,
+  intro: perm => `你正在參與一個多 AI 討論（AI圓桌會議）。${perm}回答要具體、有條理，不要客套。沒有讀到的網頁或沒查到的資料請直接說明，不要假裝讀過。`,
   teamRole: r => `\n你這次的職務：${r}\n請專注在這個方向深入研究，其他方向由其他 AI 負責，不需要面面俱到；發現和其他方向有關的重要資訊時可以簡短提出。`,
   role: r => `\n你的角色：${r}`,
   stageRole: n => `第 ${n} 棒`, stageTask: '依前面的內容完成這一棒的工作。',
@@ -83,6 +83,7 @@ const ZH = {
   teamRn: '\n請從你的職務角度，補充或質疑其他方向的發現。',
   outputFormat: (name, spec) => `\n\n【成果格式：${name}】${spec}`,
   question: q => `【這次的問題】\n${q}`, imgHead: '\n\n【附加圖片】\n', notesHead: '\n\n【使用者補充】\n',
+  replyLang: '\n回答請用上面「這次的問題」所用的語言（使用者用什麼語言提問就用什麼語言回答），直接開始回答，不要說明你選了哪種語言。',
   tailRound: r => `目前是第 ${r} 輪。`, tailStage: (r, n) => `目前是第 ${r} 棒（共 ${n} 棒）。`,
   omitHistory: (drop, kept) => `省略較早的 ${drop} 次對話摘要，只附上最近 ${kept} 次`,
   omitAll: n => `全部省略（${n} 字，超出內容預算）`, omitMiddle: n => `保留開頭與結尾，中間省略 ${n} 字`,
@@ -211,7 +212,7 @@ function buildPayload({ project, chat, turn, ai, aiId, names = {}, round, kind =
   if (tpl && isFinal) task += T.outputFormat(tpl.name, tpl.spec);
   const head = rules(ai, kind === 'analysis' ? 'text' : (ai.level || 'web'), team && kind === 'answer' ? team[aiId] || '' : '', !!team && kind !== 'answer', T);
   const question = T.question(turn.q) + briefText(turn.brief, T) + (imgNote ? T.imgHead + imgNote : '') + (notes ? T.notesHead + notes : '');
-  const tail = (kind === 'answer' ? T.tailRound(round) : kind === 'stage' ? T.tailStage(round, (turn.stages || []).length) : '') + task;
+  const tail = (kind === 'answer' ? T.tailRound(round) : kind === 'stage' ? T.tailStage(round, (turn.stages || []).length) : '') + task + (kind === 'analysis' ? '' : T.replyLang);   // 回答語言跟著使用者提問的語言，放在最後最不容易被忽略
 
   // 遮蔽：所有實際送出的文字都經過同一張代號表
   let findings = [];
