@@ -24,6 +24,7 @@ function meta(s) {
   if (s.masked) m.push(`已遮蔽 ${s.masked} 項敏感資訊`);
   for (const o of s.omitted || []) m.push(`${esc(o.label)}：${esc(o.text)}`);
   if (s.attempts > 1) m.push(`第 ${s.attempts} 次嘗試`);
+  if (typeof s.novelty === 'number') m.push(`新增資訊：${s.novelty < 0.25 ? '低' : s.novelty < 0.5 ? '中' : '高'}（以文字重疊估算）`);
   return m.length ? `<div class="meta2">${m.join('　·　')}</div>` : '';
 }
 function card(t, s, extra = '') {
@@ -37,7 +38,7 @@ function card(t, s, extra = '') {
     if (e.action === 'login' || e.action === 'install' || e.action === 'update') btns.push(`<button class="btn" data-setup>開啟連線檢查</button>`);
     return `<div class="card err" style="--c:${col(s.ai)}">${head}</div><div class="bd">${label}：${esc(e.text || '')}</div>${meta(s)}${btns.length ? `<div class="acts2">${btns.join('')}</div>` : ''}</div>`;
   }
-  return `<div class="card" id="step-${s.id}" data-step="${s.id}" data-turn="${t.id}" data-ai="${s.ai}" data-round="${s.round ?? ''}" style="--c:${col(s.ai)}">${head}<button class="cp" data-quote="${s.id}" data-turn="${t.id}" title="引用這則回答追問">追問</button><button class="cp" data-copytext="${esc(key)}">複製</button></div>
+  return `<div class="card" id="step-${s.id}" data-step="${s.id}" data-turn="${t.id}" data-ai="${s.ai}" data-round="${s.round ?? ''}" style="--c:${col(s.ai)}">${head}<button class="fav ${s.favorite ? 'on' : ''}" data-fav="${s.id}" data-turn="${t.id}" title="${s.favorite ? '取消收藏' : '收藏這則回答（和專案記憶分開）'}">${s.favorite ? '★' : '☆'}</button><button class="cp" data-quote="${s.id}" data-turn="${t.id}" title="引用這則回答追問">追問</button><button class="cp" data-copytext="${esc(key)}">複製</button></div>
     ${s.stale ? '<div class="meta2 stale">這是在其他 AI 重試之前產生的回答，參考的上一輪內容已不同。</div>' : ''}
     <div class="bd md ${long && !open ? 'clamp' : ''}">${md(s.text)}</div>
     ${long ? `<button class="more" data-exp="${esc(key)}">${open ? '收合' : '展開全文'}</button>` : ''}${sources(s)}${meta(s)}</div>`;
@@ -54,7 +55,8 @@ function busyCard(b) {
 // 每輪後介入：補充、略過下一輪某位 AI、繼續、自動跑完、直接總結、停在這裡
 function interveneBlock(t) {
   const next = t.waitingAfter + 1, nextIds = live(t).filter(s => s.kind === 'answer' && s.round === next && s.status === 'pending').map(s => s.ai);
-  return `<div class="notice" data-intervene="${t.id}"><b>第 ${t.waitingAfter} 輪結束，等你決定下一步</b>
+  const low = (t.hints || []).find(h => h.code === 'low_novelty' && h.round === t.waitingAfter);
+  return `<div class="notice" data-intervene="${t.id}"><b>第 ${t.waitingAfter} 輪結束，等你決定下一步</b>${low ? '<div class="small">這一輪和上一輪很接近，新增資訊不多，建議直接總結或針對分歧查證。</div>' : ''}
     <textarea class="field" data-inote rows="2" style="width:100%;margin-top:6px" placeholder="補充限制或指示（之後的輪次與總結都會收到）"></textarea>
     ${nextIds.length ? `<div class="row2"><span class="small">第 ${next} 輪略過：</span>${nextIds.map(i => `<label class="sk"><input type="checkbox" data-iskip="${i}"> ${esc(ai(i).name)}</label>`).join('')}</div>` : ''}
     <div class="tools">${nextIds.length ? '<button class="btn gold" data-iact="continue">繼續下一輪</button><button class="btn" data-iact="auto">不再暫停 自動跑完</button>' : '<button class="btn gold" data-iact="continue">開始總結</button>'}
@@ -101,13 +103,16 @@ function statusBlock(t, last, running) {
   if (last && t.ids.length > 1 && t.mode !== 'relay' && ['done', 'partial'].includes(t.status) && !S.run) btn.push(`<button class="btn" data-more="${t.id}">再討論一輪</button>`);
   if (t.summary) btn.push(`<button class="btn" data-mem="${t.id}">＋ 加入專案記憶</button><button class="btn" data-copysum="${t.id}">複製結論</button>`);
   if (okAns && t.ids.length > 1 && !S.run) btn.push(`<button class="btn" data-analyze="${t.id}">整理共識與證據</button>`);
+  if (t.mode !== 'relay' && t.ids.length > 1 && !S.run && L.filter(s => s.kind === 'answer' && s.status === 'ok').length >= 2) btn.push(`<button class="btn" data-anon="${t.id}">匿名比較</button>`);
   if (t.summary && !S.run) btn.push(`<button class="btn" data-outfile="${t.id}">產生檔案</button>`);
   if (!S.run) btn.push(`<button class="btn" data-cmp="${t.id}">比較版本</button>`);
   if ((okAns || L.some(s => s.kind === 'stage' && s.status === 'ok')) && !S.run) btn.push(`<button class="btn" data-branch="${t.id}">建立分支</button>`);
   btn.push(`<button class="btn" data-reask="${t.id}">重新提問</button>`);
   const reasons = (t.reasons || []).filter(r => !['stopped', 'interrupted'].includes(r.code) || t.status !== r.code);
+  const hint = (t.hints || []).find(h => h.code === 'low_novelty');
   return `<div class="tstatus"><span class="st ${t.status}">${STATUS[t.status] || esc(t.status)}</span>${t.status === 'interrupted' ? '<span class="small">程式在討論中被關閉，已完成的回答都保留了。</span>' : ''}</div>
     ${reasons.length ? `<ul class="reasons">${reasons.map(r => `<li>${reasonText(r)}</li>`).join('')}</ul>` : ''}
+    ${hint ? `<div class="notice">第 ${hint.round} 輪和上一輪的內容很接近，新增資訊不多（以文字重疊估算）。可以直接用結論，或改成「整理共識與證據」後只針對分歧查證。內容接近不代表結論正確。</div>` : ''}
     <div class="tools">${btn.join('')}</div>`;
 }
 

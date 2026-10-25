@@ -1,6 +1,7 @@
 // 對話框：傳送內容預覽、AI 設定與權限、連線檢查、隱私與資料、工作資料夾、專案
 import { $, S, api, esc, ai, av, toast, savePref, badge, P, when } from './core.js';
 import { req, refreshCheck, renderComposer } from './composer.js';
+import { capsHtml, loadModels, deleteSeat } from './phase4.js';
 
 const LABEL = { instructions: '專案說明', memory: '專案記憶', history: '先前對話摘要', skills: '技能內容（轉述給沒有安裝的 AI）', references: '參考網址', others: '其他 AI 的回答（第 2 輪起）' };
 const ROLE = { participant: '參與討論', moderator: '主持總結' };
@@ -50,24 +51,28 @@ export function openAISettings() {
     <div class="hd">${av(k)}<b>${esc(a.name)}</b><span class="small">${esc(a.provider === 'custom' ? '自訂指令' : ({ claude: 'Claude Code', codex: 'Codex CLI', gemini: 'Antigravity CLI', grok: 'Grok CLI' })[a.provider] || '')}${a.untested ? '（尚未實測）' : ''}</span><span class="grow"></span>${a.mode === 'auto' ? badge(a.guarantee) : badge({ level: 'manual' })}</div>
     <div class="row2"><select class="field" data-f="mode"><option value="auto" ${a.mode === 'auto' ? 'selected' : ''}>自動（透過 CLI）</option><option value="manual" ${a.mode === 'manual' ? 'selected' : ''}>手動貼上</option></select>
       <select class="field" data-f="level" ${a.mode === 'manual' ? 'disabled' : ''}>${levels.map(l => `<option value="${l.key}" ${a.level === l.key ? 'selected' : ''}>${l.label}</option>`).join('')}</select></div>
+    ${capsHtml(a.caps)}
     ${a.mode === 'auto' ? `<ul class="notes">${(a.guarantee?.notes || []).map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
     ${a.mode === 'auto' && a.guarantee?.level === 'none' ? `<div class="ack"><label class="sk"><input type="checkbox" data-f="ack" ${a.ack ? 'checked' : ''}> 我了解 ${esc(a.name)} 無法由本程式限制權限，它可能讀寫電腦上的檔案或執行動作；只在我信任這次內容時使用。</label></div>` : ''}
     <input class="field" data-f="role" value="${esc(a.role)}" placeholder="角色，例如：專找漏洞的審查者" style="width:100%;margin-top:6px">
     <details><summary>進階</summary>
-      <div class="row2"><input class="field" data-f="model" value="${esc(a.model)}" placeholder="模型（留空 = CLI 預設）"></div>
+      <div class="row2"><input class="field" data-f="model" data-mid="${k}" list="models-${k}" value="${esc(a.model)}" placeholder="模型（留空 = CLI 預設）" title="${esc(a.modelNote || '')}"><datalist id="models-${k}"></datalist></div>
+      <div class="small">${esc(a.modelNote || '')}${a.imageNote ? '　圖片：' + esc(a.imageNote) : ''}</div>
       ${['claude', 'codex'].includes(a.provider) ? `<label class="sk"><input type="checkbox" data-f="loadlocal" ${a.isolate === false ? 'checked' : ''}> 載入我的本機設定與技能（${a.provider === 'claude' ? 'CLAUDE.md、外掛、hooks、MCP' : 'config.toml 的通知程式與外掛'}）</label>` : ''}
       ${a.provider === 'custom' ? `<div class="row2"><input class="field" data-f="cmd" value="${esc(a.cmd)}" placeholder="自訂 CLI 指令"></div>` : ''}
       <div class="small">資料保存：${(a.records || []).map(esc).join('；')}</div>
-      <button class="btn" data-reset="${k}" style="margin-top:6px">恢復預設</button>
+      ${a.seat ? `<button class="btn" data-delseat="${k}" style="margin-top:6px;color:var(--danger)">刪除這個席位</button>` : `<button class="btn" data-reset="${k}" style="margin-top:6px">恢復預設</button>`}
     </details></div>`).join('');
   const L = st.limits;
   $('#limits').innerHTML = `<div class="kv"><span>每次送出的自動呼叫上限</span><input class="field" type="number" data-lim="maxCalls" value="${L.maxCalls}">
     <span>每一步最多重試</span><input class="field" type="number" data-lim="maxRetries" value="${L.maxRetries}">
     <span>單次呼叫逾時（分鐘）</span><input class="field" type="number" data-lim="timeoutMin" value="${L.timeoutMin}">
-    <span>每次提示的內容預算（字）</span><input class="field" type="number" data-lim="budgetChars" value="${L.budgetChars}"></div>
+    <span>每次提示的內容預算（字）</span><input class="field" type="number" data-lim="budgetChars" value="${L.budgetChars}">
+    <span>整場討論時間上限（分鐘）</span><input class="field" type="number" data-lim="maxMinutes" value="${L.maxMinutes || 60}"></div>
     <div class="small">呼叫次數是本程式呼叫 CLI 的次數，不等於模型推論次數或費用。本程式不會自動改用付費管道。</div>`;
   $('#aiform').onchange = e => { if (['mode', 'level'].includes(e.target.dataset.f)) saveAI(false).then(openAISettings); };
-  $('#aiform').onclick = async e => { const r = e.target.dataset.reset; if (r && confirm('把這個 AI 的設定恢復成預設值？')) { S.D = { ...S.D, ...(await api('/api/settings/reset-ai', { id: r })) }; openAISettings(); renderComposer(); } };
+  document.querySelectorAll('#aiform [data-mid]').forEach(i => loadModels(i.dataset.mid, i));
+  $('#aiform').onclick = async e => { if (e.target.dataset.delseat) return deleteSeat(e.target.dataset.delseat, () => { openAISettings(); renderComposer(); }); const r = e.target.dataset.reset; if (r && confirm('把這個 AI 的設定恢復成預設值？')) { S.D = { ...S.D, ...(await api('/api/settings/reset-ai', { id: r })) }; openAISettings(); renderComposer(); } };
   if (!$('#dlgAI').open) $('#dlgAI').showModal();
 }
 export async function saveAI(close = true) {

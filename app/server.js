@@ -131,7 +131,7 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
         if (url === '/api/state') return send(res, 200, stateView());
         if (url === '/api/chat') {
           const c = findC(findP(u.searchParams.get('pid')), u.searchParams.get('cid'));
-          return send(res, 200, { chat: c || null, now: Date.now(), run: engine.state() });
+          return send(res, 200, { chat: c ? { ...c, attachments: (c.attachments || []).map(({ path: _p, ...x }) => x), turns: c.turns.map(t => t.images ? { ...t, images: t.images.map(({ path: _p, ...x }) => x) } : t) } : null, now: Date.now(), run: engine.state() });
         }
         if (url === '/api/skills') return send(res, 200, scanSkills({ refresh: !!u.searchParams.get('refresh') }));
         return send(res, 404, { error: 'not found' });
@@ -153,7 +153,7 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
       version: VERSION, settings: { ...s, ais, briefTemplates: s.briefTemplates || defaultBriefs(), relayTemplates: s.relayTemplates || defaultRelays() },
       outputTemplates: Object.entries(outputs.OUTPUT_TEMPLATES).map(([key, v]) => ({ key, name: v.name })), levels: providers.LEVELS.map(k => ({ key: k, label: providers.LEVEL_LABEL[k] })),
       briefFields: BRIEF_FIELDS, memLabels: MEM_LABEL, queue: (db().queue || []).slice(-50).map(({ req, ...q }) => ({ ...q, q: String(req?.q || '').slice(0, 60), ids: req?.ids, mode: req?.mode })), queuePaused: !!db().queuePaused,
-      projects: db().projects.map(p => ({ ...p, materials: (p.materials || []).map(({ text, ...m }) => ({ ...m, chars: (text || '').length })), chats: p.chats.map(c => ({ id: c.id, title: c.title, updated: c.updated, status: (c.turns.at(-1) || {}).status, branchOf: c.branchOf ? { cid: c.branchOf.cid, title: c.branchOf.title } : undefined })).sort((a, b) => b.updated - a.updated) })),
+      projects: db().projects.map(p => ({ ...p, materials: (p.materials || []).map(({ text, ...m }) => ({ ...m, chars: (text || '').length })), chats: p.chats.map(c => ({ id: c.id, title: c.title, updated: c.updated, status: (c.turns.at(-1) || {}).status, tags: c.tags || [], branchOf: c.branchOf ? { cid: c.branchOf.cid, title: c.branchOf.title } : undefined })).sort((a, b) => b.updated - a.updated) })),
       privacy: { ...store.state, dataDir: paths.dataDir, workRoot: paths.workRoot, backups: store.listBackups().length },
       run: engine.state(),
     };

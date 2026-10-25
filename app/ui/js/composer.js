@@ -1,5 +1,6 @@
 // 輸入區：選 AI、模式、主持人，送出前一定看得到「會傳給誰、預計幾次呼叫」
 import { $, S, api, esc, ai, av, col, toast, savePref, badge, P } from './core.js';
+import { imageChips, clearImages, imageLabel } from './phase4.js';
 
 const keys = () => Object.keys(S.D.settings.ais);
 // @Claude、@ChatGPT：只傳給被點名的 AI（這次提問暫時取代上方勾選）
@@ -17,7 +18,7 @@ export function req(extra = {}) {
   return { pid: S.pid, cid: S.cid, q: $('#q').value.trim(), ids, mode: $('#mode').value, rounds: +$('#rounds').value, mod,
     modOutside: men.length ? false : !!p.modOutside, include: p.include || {}, redact: p.redact ?? S.D.settings.privacy.redact,
     pause: !!p.pause, quote: p.quote || null, brief: p.brief || null,
-    stages: relay ? p.stages || [] : undefined, review: p.review !== false, outputTemplate: p.outputTemplate || '', materials: p.materials || null, ...extra };
+    stages: relay ? p.stages || [] : undefined, review: p.review !== false, outputTemplate: p.outputTemplate || '', materials: p.materials || null, images: p.images || [], ...extra };
 }
 
 export function renderComposer() {
@@ -45,7 +46,7 @@ export function renderComposer() {
 
 // 輸入框上方的附加項目：引用的內容、任務簡報
 export function renderExtras() {
-  const p = S.pref, chips = [];
+  const p = S.pref, chips = [imageChips()].filter(Boolean);
   if (p.quote) chips.push(`<span class="skchip url" title="${esc(p.quote.text)}"><span class="ic">❝</span><b>引用 ${esc(ai(p.quote.ai).name)}${p.quote.round ? ` 第 ${p.quote.round} 輪` : ''}</b><small>${esc(p.quote.text.slice(0, 40))}${p.quote.text.length > 40 ? '…' : ''}</small><button data-rmquote title="移除引用">✕</button></span>`);
   if ($('#mode').value === 'relay') {
     const st = p.stages || [];
@@ -70,7 +71,7 @@ async function doCheck() {
   const pv = await api('/api/preview', r); if (seq !== pvSeq) return;
   if (pv.error) { box.innerHTML = `<span class="warn">${esc(pv.error)}</span>`; lastPreview = null; return; }
   lastPreview = pv;
-  const people = pv.recipients.map(x => `<span class="rcp">${av(x.ai)}<b>${esc(x.name)}</b>${x.outside ? '<span class="mtag">只主持</span>' : ''}${badge(x.guarantee)}</span>`).join('');
+  const people = pv.recipients.map(x => `<span class="rcp">${av(x.ai)}<b>${esc(x.name)}</b>${x.outside ? '<span class="mtag">只主持</span>' : ''}${badge(x.guarantee)}${x.image ? `<span class="mtag" style="${['none', 'unknown'].includes(x.image) ? 'color:var(--danger)' : ''}">🖼 ${imageLabel(x.image)}</span>` : ''}</span>`).join('');
   const e = pv.estimate, men = mentioned();
   let h = `<span>${men.length ? '只傳給（@點名）：' : '傳送給：'}</span>${people}<span>· 預計 <b>${e.total}</b> 次 CLI 呼叫${e.manual ? `（其中手動貼上 ${e.manual} 次）` : ''}</span>`
     + `<span class="lnk" data-preview>查看傳送內容</span>`;
@@ -100,6 +101,7 @@ export function bindComposer({ onSend, onPreview, openAI, openBrief, openRelay, 
   $('#pause').onchange = e => { S.pref.pause = e.target.checked; savePref(); };
   $('#briefbtn').onclick = openBrief;
   $('#extras').onclick = e => {
+    if (e.target.closest('[data-rmimg]')) return clearImages(true);
     if (e.target.closest('[data-rmquote]')) { S.pref.quote = null; savePref(); renderExtras(); return refreshCheck(); }
     if (e.target.closest('[data-rmbrief]')) { S.pref.brief = null; savePref(); renderExtras(); return refreshCheck(); }
     if (e.target.closest('[data-editbrief]')) return openBrief();

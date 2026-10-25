@@ -31,7 +31,7 @@ export const STATUS = { done: '完成', partial: '部分完成', failed: '失敗
 export function reasonText(r) {
   const n = id => esc(ai(id).name);
   return ({
-    all_failed: '所有 AI 都沒有成功回答', stopped: '你按了中止', interrupted: '程式在討論中被關閉', pending: '還有步驟沒有執行',
+    all_failed: '所有 AI 都沒有成功回答', stopped: '你按了中止', time_limit: '超過整場討論的時間上限，已自動停止', interrupted: '程式在討論中被關閉', pending: '還有步驟沒有執行',
     answer_failed: `${n(r.ai)} 第 ${r.round} 輪失敗：${esc(r.text)}`, answer_skipped: `${n(r.ai)} 第 ${r.round} 輪被略過`,
     last_round_empty: `第 ${r.round} 輪沒有成功的回答`, no_summary: '沒有產生主持人總結', summary_failed: `主持人 ${n(r.ai)} 總結失敗：${esc(r.text)}`,
   })[r.code] || esc(r.code);

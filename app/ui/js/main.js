@@ -1,6 +1,7 @@
 import { $, S, api, esc, ai, toast, copy, savePref, when, secs, P, tokenParam, STATUS } from './core.js';
 import { renderChat, chatMarkdown, texts, toggleExpand, rememberToggle, MODES } from './chat.js';
 import { renderComposer, bindComposer, autosize, refreshCheck, req, lastPreview, renderHL, renderExtras } from './composer.js';
+import { bindImages, addToQueue, renderQueueCount, openQueue, bindQueue, openSearch, bindSearch, renderTags, editTags, toggleFavorite, openAnon, bindAnon, addSeat } from './phase4.js';
 import { openRelay, bindRelay, openMaterials, bindMaterials, openOutput, bindOutput, openFiles, bindFiles, openDiff, bindDiff, branchFrom } from './phase3.js';
 import { openPreview, openAISettings, saveAI, openSetup, bindSetup, openData, bindData, bindProject, openBrief, bindBrief, openMem, bindMem, openAnalyze, bindAnalyze, bindMemList } from './dialogs.js';
 
@@ -11,7 +12,7 @@ async function load() {
   if (!P()) S.pid = st.projects[0] && st.projects[0].id;
   const p = P(); if (p && !p.chats.find(c => c.id === S.cid)) S.cid = p.chats[0] && p.chats[0].id;
   localStorage.pid = S.pid || ''; localStorage.cid = S.cid || '';
-  renderSide(); renderComposer(); lastKey = ''; await tick();
+  renderSide(); renderComposer(); renderQueueCount(); lastKey = ''; await tick();
   if (!st.settings.setupDone && !shown) { shown = true; openSetup(); }
   else if ((st.privacy.legacyPlaintext || st.privacy.recovered || st.privacy.encryption === 'failed') && !noticed) { noticed = true; openData(); }
 }
@@ -21,7 +22,7 @@ function renderSide() {
   $('#proj').innerHTML = S.D.projects.map(p => `<option value="${p.id}" ${p.id === S.pid ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
   const kw = $('#search').value.trim().toLowerCase(), list = ((P() || {}).chats || []).filter(c => !kw || (c.title || '').toLowerCase().includes(kw));
   $('#chats').innerHTML = list.map(c => `<li class="${c.id === S.cid ? 'on' : ''}" data-id="${c.id}">
-      <span class="t" title="${c.branchOf ? '分支自「' + esc(c.branchOf.title) + '」' : ''}">${c.branchOf ? '↳ ' : ''}${esc(c.title)}</span><span class="d" title="${esc(STATUS[c.status] || '')}">${['partial', 'failed', 'interrupted'].includes(c.status) ? '⚠ ' : ''}${when(c.updated)}</span>
+      <span class="t" title="${c.branchOf ? '分支自「' + esc(c.branchOf.title) + '」' : ''}">${c.branchOf ? '↳ ' : ''}${esc(c.title)}${(c.tags || []).map(t => `<span class="tg">#${esc(t)}</span>`).join('')}</span><span class="d" title="${esc(STATUS[c.status] || '')}">${['partial', 'failed', 'interrupted'].includes(c.status) ? '⚠ ' : ''}${when(c.updated)}</span>
       <span class="acts"><button data-ren="${c.id}" title="重新命名">✎</button><button data-del="${c.id}" title="刪除">✕</button></span></li>`).join('')
     || `<li class="small" style="cursor:default">${kw ? '找不到符合的對話' : '還沒有對話'}</li>`;
 }
@@ -41,7 +42,7 @@ async function tick() {
   if (wasRunning && !S.run) { notifyDone(); load(); }
   wasRunning = !!S.run;
   const key = JSON.stringify([S.chat, here && S.run, S.D.settings.ais]);
-  if (key !== lastKey) { lastKey = key; renderChat(); }
+  if (key !== lastKey) { lastKey = key; renderChat(); renderTags(); }
   clock();
 }
 function clock() {
@@ -84,7 +85,7 @@ async function doSend() {
   if (!S.cid) { S.cid = (await api('/api/chat/new', { pid: S.pid })).id; }
   const r = await api('/api/send', req());
   if (r.error) { toast(r.error, 4500); if (r.code === 'ack') openAISettings(); return; }
-  $('#q').value = ''; S.pref.quote = null; S.pref.brief = null; savePref(); renderExtras(); autosize(); await load();
+  $('#q').value = ''; S.pref.quote = null; S.pref.brief = null; S.pref.images = []; savePref(); renderExtras(); autosize(); await load();
   $('#log').scrollTop = $('#log').scrollHeight;
 }
 
@@ -100,7 +101,7 @@ async function act(url, body) {
   await tick();
 }
 $('#log').onclick = async e => {
-  const d = e.target.closest('[data-mem],[data-copysum],[data-more],[data-reask],[data-copytext],[data-exp],[data-mode],[data-retry],[data-retryall],[data-resum],[data-resume],[data-setup],[data-quote],[data-verify],[data-goto],[data-analyze],[data-iact],[data-outfile],[data-cmp],[data-branch],[data-gochat]');
+  const d = e.target.closest('[data-mem],[data-copysum],[data-more],[data-reask],[data-copytext],[data-exp],[data-mode],[data-retry],[data-retryall],[data-resum],[data-resume],[data-setup],[data-quote],[data-verify],[data-goto],[data-analyze],[data-iact],[data-outfile],[data-cmp],[data-branch],[data-gochat],[data-fav],[data-anon]');
   if (!d) { document.body.classList.remove('side'); return; }
   const ds = d.dataset;
   if (ds.mode) { S.pref.mode = ds.mode; savePref(); renderComposer(); $('#q').value = ds.ex; autosize(); return $('#q').focus(); }
@@ -119,6 +120,8 @@ $('#log').onclick = async e => {
     el.animate([{ outline: '3px solid var(--gold)' }, { outline: '3px solid transparent' }], { duration: 1600 }); return;
   }
   if (ds.analyze) return openAnalyze(turnOf(ds.analyze));
+  if (ds.fav) { const st = turnOf(ds.turn).steps.find(x => x.id === ds.fav); await toggleFavorite(ds.turn, ds.fav, !st.favorite); return tick(); }
+  if (ds.anon) return openAnon(turnOf(ds.anon));
   if (ds.outfile) return openOutput(turnOf(ds.outfile));
   if (ds.cmp) return openDiff();
   if (ds.branch) return branchFrom(turnOf(ds.branch), load);
@@ -206,6 +209,13 @@ $('#dataset').onclick = openData;
 bindSetup(load); bindData(load); bindProject(load); bindBrief(() => { renderExtras(); refreshCheck(); }); bindMem(load); bindAnalyze(tick); bindMemList(load);
 bindComposer({ onSend: sendQ, onPreview: () => openPreview(doSend), openAI: openAISettings, openBrief, openRelay, openMaterials });
 bindRelay(); bindMaterials(); bindOutput(tick); bindFiles(); bindDiff(load);
+bindImages(); bindQueue(load); bindSearch(load); bindAnon();
+$('#queuebtn').onclick = () => addToQueue(load);
+$('#queueset').onclick = async () => { await load(); openQueue(); };
+$('#advsearch').onclick = openSearch;
+$('#tagbtn').onclick = () => editTags().then(load);
+$('#aiform').insertAdjacentHTML('afterend', '<button class="btn" id="addseat" style="margin-top:10px">＋ 新增 AI 席位（同一家用不同模型或角色）</button>');
+$('#addseat').onclick = () => addSeat(() => { openAISettings(); renderComposer(); });
 
 /* ---------- 深淺色 ---------- */
 function applyTheme() { document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); }
@@ -213,4 +223,7 @@ $('#theme').onclick = () => { localStorage.theme = document.documentElement.data
 applyTheme();
 
 addEventListener('pagehide', () => navigator.sendBeacon('/api/bye?' + tokenParam(), '{}'));
-load(); setInterval(tick, 1500); setInterval(clock, 1000);
+// 程式關閉或連不到時只提示一次，不在背景一直報錯；連回來後自動恢復
+let offline = false;
+const safe = fn => () => fn().then(() => { if (offline) { offline = false; toast('已重新連上 AI圓桌會議'); } }).catch(() => { if (!offline) { offline = true; toast('連不到 AI圓桌會議，程式可能已經關閉。重新開啟後這個視窗會自動恢復', 6000); } });
+safe(load)(); setInterval(safe(tick), 1500); setInterval(clock, 1000);
