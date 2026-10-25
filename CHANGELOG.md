@@ -1,110 +1,110 @@
-# AI圓桌會議 更新紀錄
+# AI Roundtable changelog
 
-每個版本的安裝包都附在 [GitHub Releases](https://github.com/starrytss/ai-roundtable/releases)，原始碼對應同名的標籤（例如 `v1.4.0`）。
+Every installer is attached to [GitHub Releases](https://github.com/starrytss/ai-roundtable/releases), and its source is the tag with the same name (for example `v1.5.0`).
 
-v1.0 到 v1.4 是在 samtss-lab 專案裡開發的，搬到這個專案時保留了完整的提交紀錄，但提交編號不同；安裝包內 `BUILD.json` 記錄的是原本的提交。之後的版本用同一個提交執行 `npm run build` 會得到位元組完全相同的 zip。
+v1.0 to v1.4 were developed inside the samtss-lab repository. The full commit history moved here, but the commit IDs changed, so `BUILD.json` in those installers records the original samtss-lab commit. From v1.5.0 on, building the tagged commit with `npm run build` produces a byte-identical zip.
 
-## v1.5.0（2026-10-25）
+## v1.5.0 (2026-10-25)
 
-安裝包：[AI_Roundtable_Setup_v1.5.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.5.0/AI_Roundtable_Setup_v1.5.0.zip)
-SHA-256：`81c304f69f9495eb3238e37db22d60a3044ad460abf11de67bff6548c2d3fce4`
-原始碼：本專案的標籤 `v1.5.0`（提交 `0c157197e183929ae79ece1b9e5dc06c40e3ffc4`，用這個提交執行 `npm run build` 會得到相同的 zip）
+Installer: [AI_Roundtable_Setup_v1.5.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.5.0/AI_Roundtable_Setup_v1.5.0.zip)
+SHA-256: `81c304f69f9495eb3238e37db22d60a3044ad460abf11de67bff6548c2d3fce4`
+Source: tag `v1.5.0` (commit `0c157197e183929ae79ece1b9e5dc06c40e3ffc4`; `npm run build` on this commit produces the same zip)
 
-這個對話的分工
-- 輸入區新增「👥 分工」：為每位 AI 指定這次的職務，大家同時往不同方向研究；第 2 輪起每段發言標上職務，並請 AI 從自己的職務角度補充或質疑其他方向
-- 主持人拿到完整的分工清單，先分別整理每個方向的重點，再說明互相支持或衝突的地方，最後給出整合後的建議與待查證事項；主持人整合時不帶自己的研究方向
-- 分工存在對話上，只套用在這個對話並取代 AI 設定裡的角色；開新對話不會帶過去，建立分支時一起複製；重試與再討論一輪沿用同一題的分工
-- 研究團隊範本：內建「市場調查小組」「產品評估小組」，可另存與刪除
-- 同一家 AI 多席各負責一個方向（v1.4 的新增席位）
-- 送出前的檢查列與回答卡片標出每位 AI 的職務
-- 分工接力仍使用每一棒自己的職務，不套用這個分工
-- 實測：真實帳號 ChatGPT、Claude、Claude 席位各負責一個方向，討論 2 輪後由 Claude 整合，7 次呼叫全部成功
+Team roles for this chat
+- New "👥 分工" (Team) button in the input area: give each AI its own role for this chat so they research different directions at the same time. From round 2, every answer is labeled with its role, and each AI is asked to add to or challenge the other directions from its own role
+- The moderator receives the full list of roles, summarizes each direction, explains where they support or conflict with each other, then gives an integrated recommendation and what still needs checking. The moderator integrates without keeping its own research direction
+- The team is saved on the chat and applies only to that chat, replacing the role in AI settings. A new chat starts without it, a branch copies it, and retries or an extra round reuse the same roles
+- Research team templates: built-in "市場調查小組" (market research) and "產品評估小組" (product evaluation); save and delete your own
+- The same AI can take several seats, each with its own direction (using the extra seats from v1.4)
+- The pre-send check and the answer cards show each AI's role
+- Relay still uses each step's own role and ignores the team
+- Tested with real accounts: ChatGPT, Claude and a second Claude seat each covered one direction; after 2 rounds Claude integrated them; all 7 calls succeeded
 
-修正
-- 「只用文字」權限的提示不再重複同一句話
+Fixes
+- The "text only" permission no longer repeats the same sentence in the prompt
 
-## v1.4.0（2026-10-25）
+## v1.4.0 (2026-10-25)
 
-安裝包：[AI_Roundtable_Setup_v1.4.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.4.0/AI_Roundtable_Setup_v1.4.0.zip)
-SHA-256：`b4e15ae602856c8acc063683cb3dc30605af79d5cb3a16fc5092918c56b88e90`
-原始碼：本專案的標籤 `v1.4.0`（安裝包內 BUILD.json 記錄的是搬到這裡之前、samtss-lab 的提交 `d0f6fb630260483124f2646e1ee7bb26e0f34682`）
+Installer: [AI_Roundtable_Setup_v1.4.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.4.0/AI_Roundtable_Setup_v1.4.0.zip)
+SHA-256: `b4e15ae602856c8acc063683cb3dc30605af79d5cb3a16fc5092918c56b88e90`
+Source: tag `v1.4.0` (`BUILD.json` in the installer records samtss-lab commit `d0f6fb630260483124f2646e1ee7bb26e0f34682`)
 
-第四階段
-- 圖片與設計稿：每題最多 5 張（PNG／JPG／WebP／GIF，10 MB 內，依檔案內容檢查格式）。實測 Claude（stream-json 圖片區塊，不開工具）與 Codex（--image）可直接看圖；Antigravity 不接受圖片區塊，改放進工作資料夾由它的讀檔工具打開（實測可行）；Grok 與自訂指令未驗證，提示中明說它看不到圖。圖片以原檔存在資料資料夾，未加密
-- 模型選擇與能力：Claude 別名清單、Antigravity 由 agy models 讀取、Codex 自行填寫；設定頁顯示文字、圖片、搜尋、檔案、指令能力，Gemini 的檔案與指令標示「無法控制」
-- 新增 AI 席位：同一家 AI 用不同名稱、模型、角色多坐一位；內建四席不能刪除
-- 本機全文搜尋、標籤、收藏：搜尋所有專案的問題與回答，可依標籤、AI、日期、收藏篩選；收藏和專案記憶分開
-- 任務佇列：一次執行一個，每項回答存回自己的對話；可取消；程式重開時佇列先暫停
-- 匿名比較：隱藏 AI 名稱並打亂順序，選完才揭曉；依任務類型記錄個人偏好，明示不是正確率
-- 收斂提示：第 2 輪起用字元三連組重疊估算新增資訊，偏低時建議直接總結或針對分歧查證；整場討論時間上限（預設 60 分鐘），超過自動停止並註明原因
-- 程式關閉或連不到時，視窗只提示一次，重新開啟後自動恢復
+Phase 4
+- Images and design mockups: up to 5 per question (PNG/JPG/WebP/GIF, up to 10 MB, format checked by file content). Tested: Claude (stream-json image blocks, no tools) and Codex (`--image`) see images directly; Antigravity rejects image blocks, so the image goes into the work folder and its file tool opens it (works). Grok and custom commands are unverified, and their prompt says they can't see the image. Images are stored as original files in the data folder, unencrypted
+- Model choice and capabilities: Claude alias list, Antigravity list read from `agy models`, Codex typed in. Settings show text, image, search, file and command capabilities; Gemini's file and command access is marked "cannot be controlled"
+- Extra AI seats: the same AI can take another seat with its own name, model and role. The four built-in seats can't be deleted
+- Local full-text search, tags and favorites: search questions and answers across all projects, filter by tag, AI, date or favorite. Favorites are separate from project memory
+- Task queue: runs one task at a time and saves each answer to its own chat; tasks can be canceled; the queue is paused when the app restarts
+- Anonymous comparison: hides AI names and shuffles the order until you pick; records your preference per task type and says clearly it isn't accuracy
+- Convergence hints: from round 2, estimates new information with character-trigram overlap and suggests summarizing or checking only the disagreements when it's low. A time limit for the whole discussion (60 minutes by default) stops it automatically and says why
+- When the app is closed or unreachable, the window shows one notice and recovers automatically when the app is back
 
-## v1.3.0（2026-10-25）
+## v1.3.0 (2026-10-25)
 
-安裝包：[AI_Roundtable_Setup_v1.3.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.3.0/AI_Roundtable_Setup_v1.3.0.zip)
-SHA-256：`fca631fe05c5cbbd4d60818801ec302c3d65e7450c8ecabe34a9b26f853ffde5`
-原始碼：本專案的標籤 `v1.3.0`（安裝包內 BUILD.json 記錄的是搬到這裡之前、samtss-lab 的提交 `2ef856c840bd02e138e83b47551126b2199fb4f2`）
+Installer: [AI_Roundtable_Setup_v1.3.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.3.0/AI_Roundtable_Setup_v1.3.0.zip)
+SHA-256: `fca631fe05c5cbbd4d60818801ec302c3d65e7450c8ecabe34a9b26f853ffde5`
+Source: tag `v1.3.0` (`BUILD.json` in the installer records samtss-lab commit `2ef856c840bd02e138e83b47551126b2199fb4f2`)
 
-第三階段
-- 分工接力：每一棒有職務、負責的 AI、任務、驗收條件與交接範圍（上一棒／前面全部／只看問題）；依序執行，不會同時修改同一份檔案；每棒可驗收、退回修改（意見只給那一棒，保留舊版）、失敗就停下等重試；內建兩組團隊範本並可另存，職務與 AI 分開
-- 共用資料區：文字、網址、文字檔；每份指定分享對象與是否預設附上，每次提問可另選；只分享給部分 AI 的檔案不放進工作資料夾
-- 成果範本：行銷活動提案、工作分工與時程、預算比較、決策紀錄、網站開發需求、測試與驗收清單；只加在最後一步
-- 成果檔：Markdown、HTML（可列印成 PDF）、CSV（第一個表格，Excel 可開啟）；每種格式各自編號、不覆蓋，可把舊版存回成新版本；Word／PowerPoint 不由本程式產生
-- 檔案面板：工作資料夾檔案與來源（成果、AI 寫入、共用資料）、預覽、下載，連結不跟隨
-- 版本比較與採納紀錄：逐行比較任兩個回答、總結或成果；記錄採納或不採納的建議與原因，可同時寫入專案記憶
-- 討論分支：從某一輪或某一棒之後建立新對話，共同背景與工作資料夾完整複製，之後互不影響
+Phase 3
+- Relay: each step has a role, an assigned AI, a task, acceptance criteria and a hand-off scope (previous step, all previous steps, or the question only). Steps run in order, so no two AIs edit the same file at once. Each step can be reviewed and sent back for revision (feedback goes only to that step and the old version is kept), and a failure stops and waits for a retry. Two built-in team templates, and you can save your own; roles and AIs are separate
+- Shared materials: text, URLs and text files. Each item has its own audience and whether it's attached by default, and you can choose per question. Files shared with only some AIs are not placed in the work folder
+- Output templates: marketing proposal, work breakdown and schedule, budget comparison, decision record, website requirements, test and acceptance checklist. Applied only to the final step
+- Output files: Markdown, HTML (printable to PDF) and CSV (the first table, opens in Excel). Each format is numbered separately and never overwritten, and an old version can be saved back as a new one. Word and PowerPoint are not generated by this app
+- File panel: files in the work folder with their source (output, written by an AI, shared material), preview and download; links are not followed
+- Version diff and adoption log: compare any two answers, summaries or outputs line by line; record which suggestions were adopted or rejected and why, optionally into project memory
+- Discussion branches: start a new chat after any round or step, with the shared context and work folder fully copied, so the two never affect each other
 
-## v1.2.0（2026-10-25）
+## v1.2.0 (2026-10-25)
 
-安裝包：[AI_Roundtable_Setup_v1.2.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.2.0/AI_Roundtable_Setup_v1.2.0.zip)
-SHA-256：`bf3f6965e00a6cecf1d5248b134722b33c94fbd9b6511495ba55df7eacc4b47b`
-原始碼：本專案的標籤 `v1.2.0`（安裝包內 BUILD.json 記錄的是搬到這裡之前、samtss-lab 的提交 `d2979958ec5b20b9aae17c605f359790bd804058`）
+Installer: [AI_Roundtable_Setup_v1.2.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.2.0/AI_Roundtable_Setup_v1.2.0.zip)
+SHA-256: `bf3f6965e00a6cecf1d5248b134722b33c94fbd9b6511495ba55df7eacc4b47b`
+Source: tag `v1.2.0` (`BUILD.json` in the installer records samtss-lab commit `d2979958ec5b20b9aae17c605f359790bd804058`)
 
-第二階段協作功能
-- 每輪後暫停：補充指示（只套用到之後的輪次與總結）、略過下一輪的某位 AI、繼續、不再暫停、直接總結、停在這裡；使用者略過不算失敗
-- 指定 AI 追問與引用：`@Claude` 這類點名只傳給被點名的 AI；選取回答文字可「引用追問」或「請某位 AI 查證」，引用內容以不可信資料圍起來，並可跳回原文
-- 共識與證據整理：由一位參與過的 AI 只用文字整理共識、分歧、主張、待查證與待決定；「有讀取來源支持」必須有 CLI 讀取紀錄，否則降為「有引用但沒有讀取紀錄」
-- 任務簡報：目標、對象、預算、時程、必須保留的條件、希望產出的格式；內建三個範本並可另存；沒填的欄位請 AI 一次列出假設
-- 分類記憶：偏好、已確認的決策、待查證、未採用的建議，記錄來源與日期，可編輯、刪除、取代（保留被取代的版本）
-- 送出檢查列顯示 CLI 回報的用量（目前只有 Claude Code 提供），其他標示未知
+Phase 2 collaboration
+- Pause after each round: add instructions (applied only to later rounds and the summary), skip an AI in the next round, continue, stop pausing, summarize now or stop here. A skip you chose doesn't count as a failure
+- Follow-ups and quotes: an `@Claude`-style mention goes only to that AI. Select text in an answer to "quote and ask" or "ask an AI to verify". Quoted text is fenced as untrusted data, with a link back to the source
+- Consensus and evidence: an AI that took part summarizes agreements, disagreements, claims, items to verify and decisions to make, using text only. "Supported by a source that was read" requires a read in the CLI's event log; otherwise it becomes "cited without a read record"
+- Task brief: goal, audience, budget, timeline, must-keep conditions and output format. Three built-in templates and your own. The AIs list their assumptions once for any field left empty
+- Typed memory: preferences, confirmed decisions, items to verify and rejected suggestions, with source and date; edit, delete or replace (the replaced version is kept)
+- The pre-send check shows usage reported by the CLI (currently only Claude Code reports it); the others show unknown
 
-已知限制
-- Codex 的搜尋事件只有關鍵字與網域，沒有逐頁網址，所以 ChatGPT 引用的網址在證據面板會是「尚未查證」
+Known limits
+- Codex search events contain keywords and domains but no per-page URLs, so URLs cited by ChatGPT show as "not yet verified" in the evidence panel
 
-## v1.1.0（2026-10-25）
+## v1.1.0 (2026-10-25)
 
-安裝包：[AI_Roundtable_Setup_v1.1.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.1.0/AI_Roundtable_Setup_v1.1.0.zip)
-SHA-256：`71058ca1eb338ee262cd08cd4a2f65d590a7645af37a46339372f976ff6ff43c`
-原始碼：本專案的標籤 `v1.1.0`（安裝包內 BUILD.json 記錄的是搬到這裡之前、samtss-lab 的提交 `5311b68fc7f69bfe9c30a1a7777d7ad15cedda12`）
+Installer: [AI_Roundtable_Setup_v1.1.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.1.0/AI_Roundtable_Setup_v1.1.0.zip)
+SHA-256: `71058ca1eb338ee262cd08cd4a2f65d590a7645af37a46339372f976ff6ff43c`
+Source: tag `v1.1.0` (`BUILD.json` in the installer records samtss-lab commit `5311b68fc7f69bfe9c30a1a7777d7ad15cedda12`)
 
-安全與個資
-- 送出前列出所有接收者與主持人；主持人不在已勾選的 AI 時，前後端都會擋下，除非明確同意
-- 「查看傳送內容」逐項顯示並可取消：專案說明、記憶、歷史摘要、技能內容、參考網址、其他 AI 的回答
-- 權限分成五級（只用文字／可搜尋與讀網頁／讀取／寫入／執行指令），使用各家 CLI 的正式參數：Claude 用 `--tools --restricted --safe-mode`，Codex 用 `-s read-only|workspace-write --ignore-user-config --ephemeral`；無法限制的 Antigravity 需要確認
-- 每個專案／對話有獨立工作資料夾，路徑與 junction 越界檢查
-- 對話以 AES-256-GCM 加密，金鑰由 Windows DPAPI 保護；v1.0 明文資料自動轉移；版本化備份、還原、密碼保護匯出、保存期限
-- 可選的敏感資訊遮蔽（Email、手機、身分證、卡號、API 金鑰、私密金鑰、密碼），技能轉述預設關閉
-- 所有提示改走標準輸入（含 Antigravity 的 stream-json），錯誤訊息移除提示內容
-- 本機 API 保留 127.0.0.1、每次啟動換 token、Host／Origin 檢查，新增 CSP；不再載入 Google 字型
+Security and privacy
+- Before sending, lists every recipient and the moderator. If the moderator isn't one of the selected AIs, both the interface and the server block it unless you explicitly agree
+- "查看傳送內容" (View what's sent) shows each part and lets you remove it: project description, memory, history summary, skill content, reference URLs and other AIs' answers
+- Five permission levels (text only / search and read the web / read / write / run commands), using each CLI's official flags: Claude uses `--tools --restricted --safe-mode`, Codex uses `-s read-only|workspace-write --ignore-user-config --ephemeral`. Antigravity can't be restricted and needs confirmation
+- Each project and chat has its own work folder, with path and junction escape checks
+- Conversations encrypted with AES-256-GCM, key protected by Windows DPAPI. v1.0 plain-text data is migrated automatically. Versioned backups, restore, password-protected export and retention period
+- Optional masking of sensitive data (email, mobile number, national ID, card number, API key, private key, password). Relaying skill content is off by default
+- All prompts go through standard input (including Antigravity's stream-json), and error messages no longer include prompt content
+- The local API stays on 127.0.0.1 with a new token every start and Host/Origin checks, plus a CSP. Google Fonts are no longer loaded
 
-穩定性
-- 結果分成完成／部分完成／失敗／已中止／已中斷，附原因
-- 單獨重試某位 AI、某一輪或只重做主持人總結；中斷後續跑，可能已送出的步驟要確認才重送
-- 內容預算：問題與規則完整保留，其餘依優先順序放入並標示省略範圍
-- 依 CLI 事件顯示搜尋、讀網頁、讀寫檔案與回答狀態；沒有事件不推測進度
-- 連線檢查區分未安裝、版本不相容、未登入、尚未測試、測試通過、用量受限
-- 單一執行個體鎖定檔；start.bat 只在確認身分後請舊程式結束；連接埠被占用時改用下一個
-- 安裝程式先顯示遠端安裝腳本網址並要求確認；解除安裝分開處理程式、對話、工作資料夾與 CLI 登入
+Stability
+- Results are done / partial / failed / stopped / interrupted, with reasons
+- Retry a single AI, a single round or only the moderator's summary. After an interruption, resume; steps that may already have been sent need confirmation before resending
+- Content budget: the question and rules are always kept in full; everything else is added by priority, and omitted ranges are marked
+- Shows search, web reads, file reads/writes and answering based on CLI events; no events means no guessed progress
+- The connection check distinguishes not installed, incompatible version, not signed in, not yet tested, test passed and usage limited
+- Single-instance lock file; `start.bat` only asks the old instance to quit after confirming its identity; if the port is taken, the next one is used
+- Setup shows the URL of each remote install script and asks for confirmation first; uninstall handles the app, conversations, work folders and CLI sign-ins separately
 
-## v1.0.0（2026-10-24）
+## v1.0.0 (2026-10-24)
 
-安裝包：[AI_Roundtable_Setup_v1.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.0.0/AI_Roundtable_Setup_v1.0.zip)（samtss-lab 提交 `4bc39f4` 更新後的版本）
-原始碼：本專案的標籤 `v1.0.0`（samtss-lab 的提交 `ad02310`，與安裝包內容逐位元組相同）
+Installer: [AI_Roundtable_Setup_v1.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.0.0/AI_Roundtable_Setup_v1.0.zip) (the version updated by samtss-lab commit `4bc39f4`)
+Source: tag `v1.0.0` (samtss-lab commit `ad02310`, byte-identical to the installer contents)
 
-第一版
-- 多個 AI 同桌討論：勾選參與的 AI，選 1 到 3 輪，各自提案、互相挑戰，最後由主持人整理結論；可以「再討論一輪」
-- 每個 AI 透過電腦上的官方命令列工具、用你自己的訂閱帳號；沒有訂閱的 AI 可以用手動貼上模式加入
-- 自訂 AI 的指令與角色（例如「專找漏洞的審查者」）
-- 專案與對話：專案說明與專案記憶由同一專案的所有對話共用，結論可以「加入專案記憶」
-- 技能：列出電腦上已安裝的技能，可選擇是否允許使用技能與工具
-- 安裝精靈：Setup.bat 依選擇安裝各家 CLI 並逐一登入，桌面建立捷徑；解除安裝用 uninstall.bat
+First release
+- Several AIs at one table: pick the AIs and 1 to 3 rounds; each proposes, they challenge each other, and a moderator concludes. "再討論一輪" (One more round) is available
+- Each AI uses the official command-line tool on your computer and your own subscription; an AI you don't subscribe to can join in manual paste mode
+- Custom commands and roles for each AI (for example "a reviewer who hunts for flaws")
+- Projects and chats: the project description and project memory are shared by every chat in the project, and a conclusion can be added to project memory
+- Skills: lists the skills installed on your computer, with an option to allow skills and tools
+- Setup wizard: `Setup.bat` installs the chosen CLIs, signs in to each and creates a desktop shortcut; `uninstall.bat` removes it

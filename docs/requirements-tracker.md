@@ -1,95 +1,96 @@
-# AI圓桌會議 需求追蹤表
+# AI Roundtable requirements tracker
 
-狀態：✅ 完成　🟡 部分完成　⏳ 待處理　⏸ 延後　（測試欄：模擬 = 用 `test/fake-cli.mjs` 模擬 CLI；實測 = 真實帳號與 CLI）
+Status: ✅ done　🟡 partly done　⏳ to do　⏸ deferred　(Tests: simulated = CLI simulated by `test/fake-cli.mjs`; real = real accounts and CLIs)
 
-最後更新：2026-10-25　對應版本：v1.5.0（標籤 `v1.5.0`，在 starrytss/ai-roundtable 開發）；v1.4.0（samtss-lab 提交 `d0f6fb6`）、v1.3.0（提交 `2ef856c`）、v1.2.0（提交 `d297995`）、v1.1.0（提交 `5311b68`）保留為第一階段可回復版本
+Last updated: 2026-10-25　Version: v1.5.0 (tag `v1.5.0`, developed in starrytss/ai-roundtable); v1.4.0 (samtss-lab commit `d0f6fb6`), v1.3.0 (commit `2ef856c`), v1.2.0 (commit `d297995`) and v1.1.0 (commit `5311b68`) are kept as recoverable versions
 
-## 二、開始前確認
+## 2. Before starting
 
-| 項目 | 狀態 | 說明 |
+| Item | Status | Notes |
 |---|---|---|
-| 讀取 AGENTS.md | ✅ | 依網站規範更新 catalog、design、SEO、測試 |
-| 分支、遠端與未提交修改 | ✅ | 在 `feature/ai-roundtable-v1.1` 開發，期間合併過 `origin/main` 新提交 |
-| 保留其他任務成果 | ✅ | 封面圖、About 工作室等他人提交都保留；修正了封面提交未更新的測試 |
-| 原始碼／安裝包／說明頁對應 | ✅ | v1.0 原始碼 `ad02310` 與 `AI_Roundtable_Setup_v1.0.zip` 逐位元組相同；v1.1 見 CHANGELOG |
-| 可回復版本與資料備份 | ✅ | v1.0 原始碼留在 Git；程式啟動時自動備份、遷移前備份；實測遷移使用者資料副本後刪除副本，原檔雜湊不變 |
-| CLI 版本與能力盤點 | ✅ | Claude Code 2.1.310、Codex CLI 0.164.0、Antigravity agy 1.4.7、Grok 未安裝；事件格式錄成 `test/fixtures` |
+| Read AGENTS.md | ✅ | Catalog, design, SEO and tests updated following the site rules |
+| Branch, remote and uncommitted changes | ✅ | Developed on `feature/ai-roundtable-v1.1`, merging new `origin/main` commits along the way |
+| Keep other work | ✅ | Kept other people's commits such as the cover image and the About studio; fixed a test the cover commit didn't update |
+| Source, installer and page match | ✅ | v1.0 source `ad02310` is byte-identical to `AI_Roundtable_Setup_v1.0.zip`; v1.1 onward, see CHANGELOG |
+| Recoverable versions and data backup | ✅ | v1.0 source stays in Git; automatic backup on start and before migration; migration tested on a copy of real user data, then the copy was deleted and the original's hash was unchanged |
+| CLI versions and capabilities | ✅ | Claude Code 2.1.310, Codex CLI 0.164.0, Antigravity agy 1.4.7, Grok not installed; event formats recorded in `test/fixtures` |
 
-## 三、P0 安全與個資
+## 3. P0 security and privacy
 
-| # | 項目 | 狀態 | 實作與證據 |
+| # | Item | Status | Implementation and evidence |
 |---|---|---|---|
-| 1 | 資料接收者 | ✅ | `engine.js` normalize/check、`composer.js` 送出檢查列；測試 engine「unchecked moderator」、server「HTTP: unchecked moderator」（模擬） |
-| 2 | 實際傳送內容 | ✅ | `context.js` 分項、`dialogs.js` openPreview；手動貼上顯示完整提示；測試 context 3 項（模擬） |
-| 3 | 實際權限 | 🟡 | Claude、Codex 用正式參數（實測可執行）；Antigravity 實測會在資料夾內外寫檔，標示「無法限制」並要求確認；偵測使用者設定影響（Codex config.toml、Claude 本機設定）以隔離參數處理。尚未提供「寫入 Antigravity deny 規則」的選項，因為那會改動使用者全域設定，需要另外同意 |
-| 4 | 專案與任務資料夾隔離 | ✅ | `workspace.js`；測試 junction 與 `..` 越界（實際建立 junction） |
-| 5 | 本機資料保護 | ✅ | DPAPI＋AES-256-GCM、舊資料遷移、加密失敗回退、金鑰不符不動檔案、備份還原、密碼匯出、保存期限；CLI 自己的紀錄列在「資料」面板。實測 DPAPI 與使用者資料副本遷移 |
-| 6 | 敏感資訊遮蔽與技能分享 | ✅ | `redact.js`、技能轉述預設關閉並顯示來源；測試 context 2 項（模擬） |
-| 7 | 降低命令列暴露 | ✅ | Claude、Codex、Antigravity 全部走 stdin（實測）；錯誤訊息移除提示；Grok 與自訂指令只能用參數，介面明確警告 |
-| 8 | 保留本機 API 保護 | ✅ | 127.0.0.1、每次換 token、Host／Origin、CSP、Markdown 先跳脫；不可信內容加圍欄；測試 server（模擬） |
-| 9 | 修正公開說明 | ✅ | 說明頁移除未經查證的額度金額與論壇說法，更新接收者、權限、儲存位置、刪除方式與測試範圍 |
+| 1 | Data recipients | ✅ | `engine.js` normalize/check and the pre-send check in `composer.js`; tests engine "unchecked moderator" and server "HTTP: unchecked moderator" (simulated) |
+| 2 | What is actually sent | ✅ | Sections in `context.js`, openPreview in `dialogs.js`; manual paste shows the full prompt; 3 context tests (simulated) |
+| 3 | Actual permissions | 🟡 | Claude and Codex use official flags (run for real); Antigravity was observed writing files inside and outside the folder, so it's marked "cannot be restricted" and needs confirmation; user settings that change behavior (Codex config.toml, Claude local settings) are neutralized with isolation flags. No option yet to write Antigravity deny rules, because that changes the user's global settings and needs separate consent |
+| 4 | Project and task folder isolation | ✅ | `workspace.js`; tests for junction and `..` escapes (real junctions) |
+| 5 | Local data protection | ✅ | DPAPI + AES-256-GCM, legacy migration, fallback when encryption fails, files untouched on key mismatch, backup and restore, password export, retention; the CLIs' own logs are listed in the "資料" (Data) panel. DPAPI and migration of a copy of user data tested for real |
+| 6 | Masking and skill sharing | ✅ | `redact.js`; relaying skills is off by default and shows the source; 2 context tests (simulated) |
+| 7 | Less command-line exposure | ✅ | Claude, Codex and Antigravity all use stdin (real); prompts removed from error messages; Grok and custom commands can only use arguments, and the interface warns clearly |
+| 8 | Keep the local API protection | ✅ | 127.0.0.1, new token each start, Host/Origin, CSP, Markdown escaped first; untrusted content fenced; server tests (simulated) |
+| 9 | Correct the public page | ✅ | Removed unverified quota amounts and forum claims; updated recipients, permissions, storage location, deletion and test scope |
 
-## 四、P1 穩定性與維護
+## 4. P1 stability and maintenance
 
-| # | 項目 | 狀態 | 實作與證據 |
+| # | Item | Status | Implementation and evidence |
 |---|---|---|---|
-| 1 | 正確完成狀態 | ✅ | `status.js`；測試全部失敗、部分失敗、主持人失敗、中止、中斷（模擬） |
-| 2 | 單獨重試 | ✅ | `engine.retry`；只重試某 AI、只重做總結、重試上限（模擬，並在介面實際操作） |
-| 3 | 中斷恢復 | ✅ | 每步驟存檔；重開標為中斷；續跑需確認重送（模擬，並實際中止伺服器程序後續跑） |
-| 4 | 內容長度管理 | ✅ | 內容預算與省略報告；取代固定 8 次／1,500／6,000 字的截斷 |
-| 5 | 即時進度 | ✅ | 三家串流事件解析（實測格式）；沒有事件時只顯示「已送出，等待回覆」 |
-| 6 | 連線診斷 | ✅ | 未安裝／版本不相容（檢查必要參數）／未登入／尚未測試／測試通過／用量受限／失敗 |
-| 7 | 安全啟動與關閉 | ✅ | 鎖定檔＋身分＋密鑰；不再依連接埠結束程式；連接埠衝突改用下一個（模擬） |
-| 8 | 備份與更新 | ✅ | 版本化備份、格式版本與遷移、匯入還原、損壞復原 |
-| 9 | 原始碼與安裝包一致 | ✅ | `apps/ai-roundtable`、`scripts/build.mjs` 可重現；BUILD.json；CHANGELOG |
-| 10 | 安裝來源與解除安裝 | 🟡 | 遠端腳本先顯示網址並確認；winget 指定來源；解除安裝分項；移除 Google 字型；Claude 非必要連線可關。各家未公布安裝腳本雜湊，無法驗證；Codex／Antigravity 的遙測設定未找到正式參數，僅揭露 |
+| 1 | Correct completion status | ✅ | `status.js`; tests for all failed, some failed, moderator failed, stopped, interrupted (simulated) |
+| 2 | Retry one part | ✅ | `engine.retry`; retry one AI, only the summary, retry limit (simulated, and used in the interface) |
+| 3 | Resume after interruption | ✅ | Every step is saved; marked interrupted on restart; resuming needs confirmation to resend (simulated, and after killing the server process for real) |
+| 4 | Content length | ✅ | Content budget with an omission report; replaces the fixed 8 turns / 1,500 / 6,000-character truncation |
+| 5 | Live progress | ✅ | Stream events parsed for all three (real formats); without events only "sent, waiting for reply" is shown |
+| 6 | Connection diagnosis | ✅ | Not installed / incompatible version (required flags checked) / not signed in / not tested / test passed / usage limited / failed |
+| 7 | Safe start and stop | ✅ | Lock file + identity + secret; no longer stops processes by port; uses the next port on conflict (simulated) |
+| 8 | Backup and updates | ✅ | Versioned backups, format version and migration, import and restore, recovery from corruption |
+| 9 | Source matches installer | ✅ | Reproducible `scripts/build.mjs`; BUILD.json; CHANGELOG |
+| 10 | Install sources and uninstall | 🟡 | Remote scripts show their URL and need confirmation; winget with a fixed source; uninstall by part; Google Fonts removed; Claude's non-essential traffic can be turned off. The vendors publish no install-script hashes, so they can't be verified; no official flag found for Codex/Antigravity telemetry, only disclosed |
 
-## 五、P2 協作功能
+## 5. P2 collaboration
 
-| # | 項目 | 狀態 | 說明 |
+| # | Item | Status | Notes |
 |---|---|---|---|
-| 1 | 每輪後介入 | ✅ | v1.2：補充、略過、繼續、自動、直接總結、停止；engine 測試 3 項（模擬）＋介面操作 |
-| 2 | 共識與分歧表 | ✅ | v1.2：整理共識、分歧（提出者、理由）、待查證、待決定；明示多數同意不等於查證。實測 Claude 整理真實討論 |
-| 3 | 共用資料區 | ✅ | v1.3：文字／網址／檔案、分享對象、預設附上與每次自選；phase3 測試（模擬）＋介面操作 |
-| 4 | 團隊與角色範本 | ✅ | v1.3：分工接力的團隊範本，職務與 AI 分開，可另存與刪除；v1.5：一般討論的「這個對話的分工」與研究團隊範本（team 測試＋真實帳號：ChatGPT、Claude、Claude 席位各一個方向，Claude 主持整合） |
-| 5 | 結構化記憶 | ✅ | v1.2：四種類型、來源、日期、編輯、刪除、取代；server 測試（模擬） |
-| 6 | 討論分支 | ✅ | v1.3：從某輪／某棒建立分支，背景與工作資料夾複製，互不影響；phase3 測試＋介面操作 |
-| 7 | 用量與呼叫預覽 | ✅ | 預計 CLI 呼叫次數（註明不等於推論次數或費用）、呼叫與重試上限；Claude 用量比例來自 CLI 事件，其餘標示未知；不會自動改用付費管道 |
-| 8 | 成果檔案面板 | ✅ | v1.3：來源（成果、AI 寫入、共用資料）、版本、預覽、下載、回到舊版本，限制在工作資料夾 |
+| 1 | Step in after each round | ✅ | v1.2: add, skip, continue, auto, summarize now, stop; 3 engine tests (simulated) + interface use |
+| 2 | Consensus and disagreement table | ✅ | v1.2: agreements, disagreements (who and why), to verify, to decide; says clearly that majority agreement isn't verification. Claude summarized a real discussion |
+| 3 | Shared materials | ✅ | v1.3: text / URL / file, audience, attached by default or chosen per question; phase3 tests (simulated) + interface use |
+| 4 | Team and role templates | ✅ | v1.3: relay team templates with roles separate from AIs, save and delete; v1.5: "team roles for this chat" in normal discussions with research team templates (team tests + real accounts: ChatGPT, Claude and a Claude seat each on one direction, Claude integrating) |
+| 5 | Structured memory | ✅ | v1.2: four types, source, date, edit, delete, replace; server tests (simulated) |
+| 6 | Discussion branches | ✅ | v1.3: branch after a round or step, context and work folder copied, independent afterwards; phase3 tests + interface use |
+| 7 | Usage and call preview | ✅ | Expected CLI calls (noted as not equal to inference count or cost), call and retry limits; Claude usage share comes from CLI events, others show unknown; never switches to a paid channel automatically |
+| 8 | Output file panel | ✅ | v1.3: source (output, written by an AI, shared material), versions, preview, download, restore an old version, limited to the work folder |
 
-## 六、P3 新功能
+## 6. P3 new features
 
-| # | 項目 | 狀態 | 依賴與安排 |
+| # | Item | Status | Dependencies and plan |
 |---|---|---|---|
-| 1 | 指定 AI 追問與引用 | ✅ | v1.2：@點名、選取文字引用或請某位 AI 查證、跳回原文；engine 測試確認只呼叫被指定的 AI（模擬） |
-| 2 | 分工接力 | ✅ | v1.3：任務、交接範圍、驗收條件、退回修改、失敗停下；依序執行避免同時修改檔案。phase3 測試（模擬）＋真實帳號 2 棒實測 |
-| 3 | 證據與事實查核 | 🟡 | v1.2：主張四種狀態＋「有引用但沒有讀取紀錄」、讀取時間與 AI、指定查證；實測可用。限制：Codex 搜尋事件沒有逐頁網址 |
-| 4 | 圖片與設計稿 | ✅ | v1.4：Claude 與 Codex 直接看圖、Antigravity 用讀檔工具（皆實測）；看不到圖的 AI 會被告知；未上傳到額外服務。phase4 測試＋真實三家看圖討論 |
-| 5 | 任務簡報表單 | ✅ | v1.2：六個欄位、內建與自訂範本、缺少事項集中列出；engine、server 測試（模擬） |
-| 6 | 成果範本 | 🟡 | v1.3：六種範本，產生 Markdown／HTML／CSV（真實檔案）；Word／PowerPoint 不由本程式產生，介面明說 |
-| 7 | 版本差異 | ✅ | v1.3：逐行比較、採納／不採納紀錄與原因、回到先前版本 |
-| 8 | 本機全文搜尋與標籤 | ✅ | v1.4：所有專案、關鍵字／標籤／AI／日期／收藏；只在本機；收藏與記憶分開 |
-| 9 | 匿名答案比較 | ✅ | v1.4：隱藏名稱、選完揭曉、依任務類型的個人偏好統計，明示不是正確率 |
-| 10 | 可擴充 AI 與模型 | ✅ | v1.4：模型清單、能力表、同一家多席位；不支援的能力標示停用或未驗證 |
-| 11 | 任務佇列 | ✅ | v1.4：依序執行與取消、每項存回自己的對話、重開時暫停；並行處理不做（避免額度與檔案衝突） |
-| 12 | 收斂與停止條件 | ✅ | v1.4：新增資訊估算與建議、整場時間上限並顯示停止原因；明示內容接近不代表正確 |
-| 13 | 後續擴充候選 | ⏸ | 已評估、暫不實作：①語音輸入與朗讀：瀏覽器語音辨識在 Edge 會把聲音送到雲端服務，需另外揭露並取得同意；朗讀可用本機語音，效益低。②MCP 與外部資料：各家 CLI 本身支援，但本程式刻意用 --strict-mcp-config／--safe-mode 關閉，以免擴大權限；若開放必須逐一列出可做的動作（不預設寄信、發訊息、修改或發布）。③加密跨電腦同步：已有密碼保護的匯出匯入；即時同步需要雲端儲存與帳號，會讓資料離開這台電腦，與目前的隱私設計不符 |
+| 1 | Targeted follow-ups and quotes | ✅ | v1.2: @mentions, quote selected text or ask an AI to verify, jump back to the source; engine test confirms only the mentioned AI is called (simulated) |
+| 2 | Relay | ✅ | v1.3: task, hand-off scope, acceptance criteria, send back for revision, stop on failure; runs in order to avoid editing files at the same time. phase3 tests (simulated) + a real 2-step run |
+| 3 | Evidence and fact checking | 🟡 | v1.2: four claim states + "cited without a read record", read time and AI, request verification; works for real. Limit: Codex search events have no per-page URLs |
+| 4 | Images and design mockups | ✅ | v1.4: Claude and Codex see images directly, Antigravity uses its file tool (all real); an AI that can't see images is told so; nothing uploaded to extra services. phase4 tests + a real three-AI image discussion |
+| 5 | Task brief form | ✅ | v1.2: six fields, built-in and custom templates, missing items listed together; engine and server tests (simulated) |
+| 6 | Output templates | 🟡 | v1.3: six templates producing Markdown/HTML/CSV (real files); Word and PowerPoint are not generated by this app, and the interface says so |
+| 7 | Version diff | ✅ | v1.3: line-by-line diff, adopted/rejected log with reasons, restore an earlier version |
+| 8 | Local full-text search and tags | ✅ | v1.4: all projects, keyword / tag / AI / date / favorite; local only; favorites separate from memory |
+| 9 | Anonymous answer comparison | ✅ | v1.4: names hidden, revealed after choosing, personal preference stats per task type, says clearly it isn't accuracy |
+| 10 | Extensible AIs and models | ✅ | v1.4: model lists, capability table, several seats for one AI; unsupported capabilities marked off or unverified |
+| 11 | Task queue | ✅ | v1.4: runs in order with cancel, each answer saved to its own chat, paused on restart; no parallel runs (avoids quota and file conflicts) |
+| 12 | Convergence and stop conditions | ✅ | v1.4: new-information estimate with suggestions, a time limit for the whole discussion with the stop reason shown; says clearly that similar content isn't proof of correctness |
+| 13 | Later candidates | ⏸ | Evaluated, not implemented for now: (1) Voice input and read-aloud: browser speech recognition in Edge sends audio to a cloud service, which needs disclosure and consent; read-aloud could use local voices but adds little. (2) MCP and external data: the CLIs support it, but this app deliberately turns it off with --strict-mcp-config/--safe-mode to avoid widening permissions; enabling it would require listing every allowed action (no sending email or messages, editing or publishing by default). (3) Encrypted sync between computers: password-protected export and import already exist; live sync needs cloud storage and accounts, which would take data off this computer and conflicts with the current privacy design |
 
-## 八、驗收項目
+## 8. Acceptance checks
 
-| 項目 | 狀態 | 測試 |
+| Item | Status | Tests |
 |---|---|---|
-| 全部與部分 AI 失敗 | ✅ | engine 測試（模擬）；介面實際操作（模擬 CLI） |
-| 主持人失敗或未被勾選 | ✅ | engine、server 測試（模擬） |
-| 單獨重試與中斷恢復 | ✅ | engine 測試（模擬）＋實際結束伺服器程序後續跑 |
-| 手動與自動混用 | ✅ | engine 測試（模擬）＋介面貼上回覆 |
-| 長內容與技能截斷 | ✅ | context 測試（模擬） |
-| 跨專案檔案隔離 | ✅ | server、engine 測試（實際 junction） |
-| 未授權本機 API 請求 | ✅ | server 測試 |
-| 備份、遷移與還原 | ✅ | store 測試＋實際 DPAPI＋使用者資料副本遷移 |
-| 指定追問的接收者 | ✅ | engine 測試（模擬）＋介面操作 |
-| 圖片能力不支援的處理 | ✅ | phase4 測試：看不到圖的 AI 提示中明說，不假裝看過 |
-| 任務佇列與回覆歸屬 | ✅ | phase4 測試：依序執行、各自存回自己的對話；手動回覆對到步驟編號 |
-| 成果檔案與版本對應 | ✅ | phase3、server 測試（版本不覆蓋、來源、回存舊版）＋介面操作 |
-| 原始碼與安裝包一致 | ✅ | build 測試（兩次建置相同、Windows 解壓縮後位元組相同） |
-| 真實帳號測試 | 🟡 | Claude、Codex、Antigravity 連線與事件格式；Claude＋ChatGPT 實際討論、共識證據整理與 2 棒分工接力；三家一起看同一張圖的完整討論；Grok 未測；Setup.bat 未在全新電腦完整執行 |
+| All or some AIs fail | ✅ | engine tests (simulated); interface use (simulated CLI) |
+| Moderator fails or isn't selected | ✅ | engine and server tests (simulated) |
+| Retry one part and resume | ✅ | engine tests (simulated) + resume after killing the server process for real |
+| Manual and automatic mixed | ✅ | engine tests (simulated) + pasting a reply in the interface |
+| Long content and skill truncation | ✅ | context tests (simulated) |
+| File isolation between projects | ✅ | server and engine tests (real junctions) |
+| Unauthorized local API requests | ✅ | server tests |
+| Backup, migration and restore | ✅ | store tests + real DPAPI + migration of a copy of user data |
+| Recipients of targeted follow-ups | ✅ | engine tests (simulated) + interface use |
+| AI that can't see images | ✅ | phase4 tests: the prompt says it can't see the image, so it doesn't pretend |
+| Task queue and reply ownership | ✅ | phase4 tests: runs in order, each saved to its own chat; manual replies match step IDs |
+| Output files and versions | ✅ | phase3 and server tests (no overwrite, source, save old version back) + interface use |
+| Source matches installer | ✅ | build tests (two builds identical, bytes identical after Windows extraction) |
+| Team roles for this chat | ✅ | team tests (simulated) + real accounts: ChatGPT, Claude and a Claude seat on three directions, Claude integrating, all 7 calls succeeded |
+| Real-account tests | 🟡 | Claude, Codex, Antigravity connections and event formats; a real Claude + ChatGPT discussion, consensus and evidence, and a 2-step relay; a full discussion of the same image by all three; the v1.5 team discussion; Grok not tested; Setup.bat not run end to end on a fresh computer |
