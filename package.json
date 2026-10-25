@@ -1,7 +1,17 @@
 {
   "name": "ai-roundtable",
+  "version": "1.4.0",
   "private": true,
-  "description": "AI圓桌會議 desktop app (Node.js 18+, no dependencies)",
+  "description": "AI圓桌會議：讓 ChatGPT、Claude、Gemini、Grok 透過官方命令列工具一起開會的 Windows 桌面程式",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/starrytss/ai-roundtable.git"
+  },
+  "homepage": "https://samtss.com/tools/ai-roundtable/",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "test": "node --test \"test/*.test.mjs\"",
     "build": "node scripts/build.mjs",

@@ -1,12 +1,14 @@
 # AI圓桌會議 更新紀錄
 
-每個安裝包都記錄它對應的原始碼提交（安裝包內 `BUILD.json`）。用同一個提交執行 `node scripts/build.mjs` 會得到位元組完全相同的 zip。
+每個版本的安裝包都附在 [GitHub Releases](https://github.com/starrytss/ai-roundtable/releases)，原始碼對應同名的標籤（例如 `v1.4.0`）。
+
+v1.0 到 v1.4 是在 samtss-lab 專案裡開發的，搬到這個專案時保留了完整的提交紀錄，但提交編號不同；安裝包內 `BUILD.json` 記錄的是原本的提交。之後的版本用同一個提交執行 `npm run build` 會得到位元組完全相同的 zip。
 
 ## v1.4.0（2026-10-25）
 
-安裝包：`public/downloads/AI_Roundtable_Setup_v1.4.0.zip`
+安裝包：[AI_Roundtable_Setup_v1.4.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.4.0/AI_Roundtable_Setup_v1.4.0.zip)
 SHA-256：`b4e15ae602856c8acc063683cb3dc30605af79d5cb3a16fc5092918c56b88e90`
-原始碼提交：`d0f6fb630260483124f2646e1ee7bb26e0f34682`
+原始碼：本專案的標籤 `v1.4.0`（安裝包內 BUILD.json 記錄的是搬到這裡之前、samtss-lab 的提交 `d0f6fb630260483124f2646e1ee7bb26e0f34682`）
 
 第四階段
 - 圖片與設計稿：每題最多 5 張（PNG／JPG／WebP／GIF，10 MB 內，依檔案內容檢查格式）。實測 Claude（stream-json 圖片區塊，不開工具）與 Codex（--image）可直接看圖；Antigravity 不接受圖片區塊，改放進工作資料夾由它的讀檔工具打開（實測可行）；Grok 與自訂指令未驗證，提示中明說它看不到圖。圖片以原檔存在資料資料夾，未加密
@@ -20,9 +22,9 @@ SHA-256：`b4e15ae602856c8acc063683cb3dc30605af79d5cb3a16fc5092918c56b88e90`
 
 ## v1.3.0（2026-10-25）
 
-安裝包：`public/downloads/AI_Roundtable_Setup_v1.3.0.zip`
+安裝包：[AI_Roundtable_Setup_v1.3.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.3.0/AI_Roundtable_Setup_v1.3.0.zip)
 SHA-256：`fca631fe05c5cbbd4d60818801ec302c3d65e7450c8ecabe34a9b26f853ffde5`
-原始碼提交：`2ef856c840bd02e138e83b47551126b2199fb4f2`
+原始碼：本專案的標籤 `v1.3.0`（安裝包內 BUILD.json 記錄的是搬到這裡之前、samtss-lab 的提交 `2ef856c840bd02e138e83b47551126b2199fb4f2`）
 
 第三階段
 - 分工接力：每一棒有職務、負責的 AI、任務、驗收條件與交接範圍（上一棒／前面全部／只看問題）；依序執行，不會同時修改同一份檔案；每棒可驗收、退回修改（意見只給那一棒，保留舊版）、失敗就停下等重試；內建兩組團隊範本並可另存，職務與 AI 分開
@@ -35,9 +37,9 @@ SHA-256：`fca631fe05c5cbbd4d60818801ec302c3d65e7450c8ecabe34a9b26f853ffde5`
 
 ## v1.2.0（2026-10-25）
 
-安裝包：`public/downloads/AI_Roundtable_Setup_v1.2.0.zip`
+安裝包：[AI_Roundtable_Setup_v1.2.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.2.0/AI_Roundtable_Setup_v1.2.0.zip)
 SHA-256：`bf3f6965e00a6cecf1d5248b134722b33c94fbd9b6511495ba55df7eacc4b47b`
-原始碼提交：`d2979958ec5b20b9aae17c605f359790bd804058`
+原始碼：本專案的標籤 `v1.2.0`（安裝包內 BUILD.json 記錄的是搬到這裡之前、samtss-lab 的提交 `d2979958ec5b20b9aae17c605f359790bd804058`）
 
 第二階段協作功能
 - 每輪後暫停：補充指示（只套用到之後的輪次與總結）、略過下一輪的某位 AI、繼續、不再暫停、直接總結、停在這裡；使用者略過不算失敗
@@ -52,9 +54,9 @@ SHA-256：`bf3f6965e00a6cecf1d5248b134722b33c94fbd9b6511495ba55df7eacc4b47b`
 
 ## v1.1.0（2026-10-25）
 
-安裝包：`public/downloads/AI_Roundtable_Setup_v1.1.0.zip`
+安裝包：[AI_Roundtable_Setup_v1.1.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.1.0/AI_Roundtable_Setup_v1.1.0.zip)
 SHA-256：`71058ca1eb338ee262cd08cd4a2f65d590a7645af37a46339372f976ff6ff43c`
-原始碼提交：`5311b68fc7f69bfe9c30a1a7777d7ad15cedda12`
+原始碼：本專案的標籤 `v1.1.0`（安裝包內 BUILD.json 記錄的是搬到這裡之前、samtss-lab 的提交 `5311b68fc7f69bfe9c30a1a7777d7ad15cedda12`）
 
 安全與個資
 - 送出前列出所有接收者與主持人；主持人不在已勾選的 AI 時，前後端都會擋下，除非明確同意
@@ -77,5 +79,13 @@ SHA-256：`71058ca1eb338ee262cd08cd4a2f65d590a7645af37a46339372f976ff6ff43c`
 
 ## v1.0.0（2026-10-24）
 
-安裝包：`public/downloads/AI_Roundtable_Setup_v1.0.zip`（提交 `4bc39f4` 更新後的版本）
-原始碼：`apps/ai-roundtable` 的提交 `ad02310`（與安裝包內容逐位元組相同）
+安裝包：[AI_Roundtable_Setup_v1.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.0.0/AI_Roundtable_Setup_v1.0.zip)（samtss-lab 提交 `4bc39f4` 更新後的版本）
+原始碼：本專案的標籤 `v1.0.0`（samtss-lab 的提交 `ad02310`，與安裝包內容逐位元組相同）
+
+第一版
+- 多個 AI 同桌討論：勾選參與的 AI，選 1 到 3 輪，各自提案、互相挑戰，最後由主持人整理結論；可以「再討論一輪」
+- 每個 AI 透過電腦上的官方命令列工具、用你自己的訂閱帳號；沒有訂閱的 AI 可以用手動貼上模式加入
+- 自訂 AI 的指令與角色（例如「專找漏洞的審查者」）
+- 專案與對話：專案說明與專案記憶由同一專案的所有對話共用，結論可以「加入專案記憶」
+- 技能：列出電腦上已安裝的技能，可選擇是否允許使用技能與工具
+- 安裝精靈：Setup.bat 依選擇安裝各家 CLI 並逐一登入，桌面建立捷徑；解除安裝用 uninstall.bat
