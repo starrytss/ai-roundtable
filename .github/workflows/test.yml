@@ -13,5 +13,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: lts/*   # 和 Setup.bat 安裝的 Node.js LTS 相同
       - run: npm test
