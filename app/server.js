@@ -37,7 +37,7 @@ const defaultBriefs = () => [
   { name: '供應商比較', fields: { goal: '', audience: '', budget: '', timeline: '', constraints: '', format: '比較表：價格、條件、風險，最後給建議' }, ask: ['goal', 'budget', 'constraints'] },
 ];
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const ROOT = path.resolve(__dirname, '..'), UI = path.join(__dirname, 'ui');
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const APP = process.argv.includes('--app');
