@@ -53,12 +53,12 @@ async function check(id, ai, last) {
 }
 
 // 實際送一句短問題；用「只用文字回答」的權限，不讓它使用工具
-async function test(ai, { workdir }) {
+async function test(ai, { workdir, lang } = {}) {
   const t0 = Date.now();
   try {
     const inv = invocation({ ...ai, level: 'text' }, { workdir });
     if (inv.missing) throw Object.assign(new Error('找不到程式 ' + inv.missing), { code: 'ENOENT' });
-    const r = await run(inv, '這是連線測試。只回覆 OK 兩個字。', { cwd: workdir, timeoutMs: 120000 });
+    const r = await run(inv, require('./context').promptsFor(lang).connectionTest, { cwd: workdir, timeoutMs: 120000 });
     return { ok: true, at: Date.now(), ms: Date.now() - t0, text: `連線成功（${Math.round((Date.now() - t0) / 1000)} 秒）：${r.text.slice(0, 40)}`, rateLimit: r.rateLimit || null };
   } catch (e) { const k = classify(e); return { ok: false, at: Date.now(), kind: k.kind, text: k.text, raw: k.raw, action: k.action }; }
 }

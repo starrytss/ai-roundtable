@@ -32,6 +32,7 @@ async function boot() {
   const page = await req(app.port, '/');
   const token = page.text.match(/name="rt-token" content="([0-9a-f]+)"/)[1];
   const api = (p, body) => req(app.port, p, { method: body ? 'POST' : 'GET', headers: { 'X-RT-Token': token }, body });
+  await api('/api/settings', { lang: 'zh-TW' });   // 這些測試檢查中文提示與訊息
   return { ...app, token, api, dataDir };
 }
 

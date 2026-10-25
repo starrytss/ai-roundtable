@@ -27,6 +27,7 @@ function setup(rules = {}) {
   process.env.RT_FAKE_LOG = path.join(root, 'calls.jsonl');
   const paths = resolvePaths({ appDir: root, dataDir: path.join(root, 'data') });
   const store = openStore(paths, { protector: { protect: xor, unprotect: xor } });
+  store.db.settings.lang = 'zh-TW';   // 這些測試檢查中文提示
   store.db.settings.ais.gemini.ack = true;
   const p = store.db.projects[0]; p.chats.push({ id: 'chat000001', title: '主題', updated: 0, turns: [] });
   const engine = createEngine({ store });

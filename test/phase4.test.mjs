@@ -33,7 +33,7 @@ async function boot(rules = {}) {
   const page = await new Promise(r => http.get({ host: '127.0.0.1', port: app.port, path: '/', headers: { Host: `127.0.0.1:${app.port}` } }, s => { let b = ''; s.on('data', d => b += d); s.on('end', () => r(b)); }));
   const token = page.match(/rt-token" content="([0-9a-f]+)/)[1];
   const api = (p, body) => req(app.port, p, body, token);
-  await api('/api/settings', { ais: { gemini: { ack: true } } });
+  await api('/api/settings', { lang: 'zh-TW', ais: { gemini: { ack: true } } });   // 這些測試檢查中文提示
   const pid = (await api('/api/state')).projects[0].id, cid = (await api('/api/chat/new', { pid })).id;
   const calls = () => fs.existsSync(process.env.RT_FAKE_LOG) ? fs.readFileSync(process.env.RT_FAKE_LOG, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
   const waitIdle = async () => { for (let i = 0; i < 150; i++) { const c = await api(`/api/chat?pid=${pid}&cid=${cid}`); if (!c.run && !(await api('/api/state')).queue.some(q => ['queued', 'running'].includes(q.status))) return c; await new Promise(r => setTimeout(r, 80)); } };

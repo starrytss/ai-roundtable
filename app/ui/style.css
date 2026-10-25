@@ -46,8 +46,8 @@ aside { background:var(--sunk); border-right:1px solid var(--line); display:flex
 #chats .acts { display:none; }
 #chats li:hover .acts { display:flex; } #chats li:hover .d { display:none; }
 #chats .acts button { color:var(--mut); padding:0 4px; font-size:13px; } #chats .acts button:hover { color:var(--ink); }
-.sidefoot { display:flex; gap:4px; border-top:1px solid var(--line); padding-top:10px; }
-.sidefoot .icon { flex:1; width:auto; gap:6px; display:flex; font-size:13px; }
+.sidefoot { display:flex; flex-wrap:wrap; gap:4px; border-top:1px solid var(--line); padding-top:10px; }
+.sidefoot .icon { flex:1 1 auto; width:auto; gap:6px; display:flex; font-size:13px; white-space:nowrap; }
 
 /* ---------- 主區 ---------- */
 main { display:flex; flex-direction:column; min-width:0; height:100vh; }
@@ -328,3 +328,7 @@ dialog .df { flex-wrap:wrap; align-items:center; }
 .team-row { display:grid; grid-template-columns:minmax(150px, auto) 1fr; gap:10px; align-items:center; margin:8px 0; }
 .team-row .sk { display:flex; align-items:center; gap:6px; white-space:nowrap; }
 .team-row.off .field { opacity:.5; }
+
+/* ---------- 語言 ---------- */
+.langpick { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--line); }
+.langpick span { font-weight:600; margin-right:auto; }

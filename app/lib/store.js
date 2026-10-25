@@ -12,8 +12,9 @@ const DEFAULT_AIS = () => ({
   grok: { name: 'Grok', provider: 'grok', mode: 'manual', level: 'web', role: '', model: '', cmd: '', ack: false },
   gemini: { name: 'Gemini', provider: 'gemini', mode: 'auto', level: 'web', role: '', model: '', cmd: '', ack: false },
 });
+const LANGS = ['en', 'zh-TW'];
 const DEFAULT_SETTINGS = () => ({
-  ais: DEFAULT_AIS(), setupDone: false,
+  ais: DEFAULT_AIS(), setupDone: false, lang: 'en',   // 新安裝預設英文
   privacy: { encryption: 'on', retentionDays: 0, redact: true, reduceTraffic: true },
   limits: { maxCalls: 20, maxRetries: 2, timeoutMin: 10, budgetChars: 24000, maxMinutes: 60 },
 });
@@ -56,7 +57,8 @@ function migrate(db) {
   for (const k of new Set([...Object.keys(def.ais), ...Object.keys(s.ais || {})])) ais[k] = migrateAi(k, (s.ais || {})[k]);
   const out = {
     schema: SCHEMA,
-    settings: { ...def, ...s, ais, privacy: { ...def.privacy, ...(s.privacy || {}) }, limits: { ...def.limits, ...(s.limits || {}) } },
+    // 升級前沒有語言設定的資料是中文版建立的
+    settings: { ...def, ...s, lang: LANGS.includes(s.lang) ? s.lang : 'zh-TW', ais, privacy: { ...def.privacy, ...(s.privacy || {}) }, limits: { ...def.limits, ...(s.limits || {}) } },
     queue: Array.isArray(db.queue) ? db.queue : [],
     projects: (db.projects || []).map(p => ({ ...newProject(p.name), ...p, memories: p.memories || [],
       chats: (p.chats || []).map(c => ({ ...c, turns: (c.turns || []).map(migrateTurn) })) })),
@@ -193,4 +195,4 @@ function openStore(paths, { protector = cs.dpapiProtector(), now = () => Date.no
   };
 }
 
-module.exports = { openStore, migrate, emptyDb, newProject, uid, DEFAULT_AIS, SCHEMA };
+module.exports = { openStore, migrate, emptyDb, newProject, uid, DEFAULT_AIS, SCHEMA, LANGS };

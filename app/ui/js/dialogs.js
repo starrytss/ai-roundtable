@@ -2,6 +2,7 @@
 import { $, S, api, esc, ai, av, toast, savePref, badge, P, when } from './core.js';
 import { req, refreshCheck, renderComposer } from './composer.js';
 import { capsHtml, loadModels, deleteSeat } from './phase4.js';
+import { tr } from './i18n.js';
 
 const LABEL = { instructions: '專案說明', memory: '專案記憶', history: '先前對話摘要', skills: '技能內容（轉述給沒有安裝的 AI）', references: '參考網址', others: '其他 AI 的回答（第 2 輪起）' };
 const ROLE = { participant: '參與討論', moderator: '主持總結' };
@@ -173,7 +174,7 @@ export function bindData(reload) {
       const pw = $('#expPw').value; if (!pw && !confirm('沒有設定密碼，匯出檔會是明文。確定要匯出？')) return;
       const r = await api('/api/data/export', { password: pw }); if (r.error) return toast(r.error);
       const a = document.createElement('a'), bin = Uint8Array.from(atob(r.file), c => c.charCodeAt(0));
-      a.href = URL.createObjectURL(new Blob([bin])); a.download = `AI圓桌會議備份-${new Date().toISOString().slice(0, 10)}${r.protected ? '.rtexport' : '.json'}`; a.click();
+      a.href = URL.createObjectURL(new Blob([bin])); a.download = `${tr('AI圓桌會議備份-')}${new Date().toISOString().slice(0, 10)}${r.protected ? '.rtexport' : '.json'}`; a.click();
       return toast('已匯出');
     }
     if (act === 'import') {

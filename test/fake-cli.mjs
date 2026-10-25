@@ -16,8 +16,9 @@ function main() {
   let prompt = input;
   if (provider === 'gemini') { try { prompt = JSON.parse(input.trim()).message.content; } catch {} }
   if (args.includes('{prompt}')) prompt = '';
-  const stage = (prompt.match(/目前是第 (\d+) 棒/) || [])[1];
-  const round = /你是查核整理員/.test(prompt) ? 'analysis' : /你是主持人/.test(prompt) ? 'sum' : stage ? 'S' + stage : (prompt.match(/目前是第 (\d+) 輪/) || [])[1] || '1';
+  const num = re => (prompt.match(re) || []).slice(1).find(Boolean);   // 中文與英文提示都認得
+  const stage = num(/目前是第 (\d+) 棒|This is step (\d+) of/);
+  const round = /你是查核整理員|You are the fact checker/.test(prompt) ? 'analysis' : /你是主持人|You are the moderator/.test(prompt) ? 'sum' : stage ? 'S' + stage : num(/目前是第 (\d+) 輪|This is round (\d+)\./) || '1';
   const who = process.env.RT_FAKE_AS || provider;
   const rule = rules[`${who}@${round}`] || rules[who] || 'ok';
   if (process.env.RT_FAKE_LOG) fs.appendFileSync(process.env.RT_FAKE_LOG, JSON.stringify({ provider: who, round, args, stdin: prompt, cwd: process.cwd(), at: Date.now() }) + '\n');

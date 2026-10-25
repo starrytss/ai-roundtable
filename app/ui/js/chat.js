@@ -1,6 +1,7 @@
 // 對話內容：每一步一張卡片、真實狀態與原因、單獨重試與續跑、只顯示 CLI 真的回報的進度
 import { $, S, esc, ai, av, col, secs, when, badge, STATUS, reasonText, evText } from './core.js';
 import { md } from './md.js';
+import { tr } from './i18n.js';
 
 export const MODES = {
   discuss: { name: '一般討論', p1: '各自提案', pn: '互相評論', d: '各自提案 → 互相評論 → 主持人整理結論', ex: '幫我評估：週末快閃店要選百貨中庭還是捷運站？' },
@@ -189,11 +190,11 @@ export function chatMarkdown() {
   let s = `# ${chat.title}\n\n`;
   for (const t of chat.turns) {
     if (!t.steps) continue;
-    s += `## 問題\n\n${t.q}\n\n_狀態：${STATUS[t.status] || t.status}　傳給：${t.ids.map(i => ai(i).name).join('、')}_\n\n`;
+    s += `## ${tr('問題')}\n\n${t.q}\n\n_${tr(`狀態：${STATUS[t.status] || t.status}`)}　${tr(`傳給：${t.ids.map(i => ai(i).name).join('、')}`)}_\n\n`;   // 匯出檔跟著介面語言
     const solo = t.ids.length === 1;
-    for (let r = 1; r <= t.rounds; r++) for (const st of live(t).filter(x => x.kind === 'answer' && x.round === r && x.status === 'ok')) s += `### ${solo ? '' : `第 ${r} 輪 · `}${ai(st.ai).name}\n\n${st.text}\n\n`;
+    for (let r = 1; r <= t.rounds; r++) for (const st of live(t).filter(x => x.kind === 'answer' && x.round === r && x.status === 'ok')) s += `### ${solo ? '' : tr(`第 ${r} 輪`) + ' · '}${ai(st.ai).name}\n\n${st.text}\n\n`;
     const sm = live(t).filter(x => x.kind === 'summary' && x.status === 'ok').pop();
-    if (sm && !solo) s += `### 結論（主持人 ${ai(sm.ai).name}）\n\n${sm.text}\n\n`;
+    if (sm && !solo) s += `### ${tr(`結論（主持人 ${ai(sm.ai).name}）`)}\n\n${sm.text}\n\n`;
     s += '---\n\n';
   }
   return s;

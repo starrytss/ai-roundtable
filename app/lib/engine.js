@@ -94,7 +94,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const n = normalize(req), { p, c } = find(req.pid, req.cid);
     if (!p) throw err('input', '找不到專案');
     const est = estimate(n);
-    const turn = { id: 'preview', q: n.q, mode: n.mode, ids: n.ids, rounds: n.rounds, steps: [], notes: [], quote: n.quote, brief: n.brief, stages: n.stages, roles: n.roles || undefined, outputTemplate: n.outputTemplate, materials: n.materials, images: pickImages(c, n.images) };
+    const turn = { id: 'preview', lang: S().lang, q: n.q, mode: n.mode, ids: n.ids, rounds: n.rounds, steps: [], notes: [], quote: n.quote, brief: n.brief, stages: n.stages, roles: n.roles || undefined, outputTemplate: n.outputTemplate, materials: n.materials, images: pickImages(c, n.images) };
     const table = new Map(), budget = S().limits.budgetChars, sk = skills();
     const per = recipients(n).map(r => {
       const ai = S().ais[r.ai], base = { project: p, chat: c || { turns: [] }, turn, ai, aiId: r.ai, names: names(), include: n.include, redact: n.redact, table, budget, skills: sk };
@@ -216,7 +216,8 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const n = normalize(req), est = estimate(n); check(n, est);
     const { p, c } = find(req.pid, req.cid);
     if (!c) throw err('input', '找不到對話');
-    const t = { id: uid(), q: n.q, at: Date.now(), mode: n.mode, rounds: n.rounds, ids: n.ids, mod: n.mod, modOutside: n.modOutside,
+    const t = { id: uid(), lang: S().lang, q: n.q, at: Date.now(),   // 提示語言跟著送出時的介面語言，重試與再一輪沿用
+      mode: n.mode, rounds: n.rounds, ids: n.ids, mod: n.mod, modOutside: n.modOutside,
       include: n.include, redact: n.redact, notes: [], steps: [], pause: n.pause, quote: n.quote, brief: n.brief, stages: n.stages || undefined, roles: n.roles || undefined, outputTemplate: n.outputTemplate, materials: n.materials, images: pickImages(c, n.images),
       levels: Object.fromEntries(recipients(n).map(r => [r.ai, r.mode === 'manual' ? 'manual' : r.level])) };
     if (n.relay) n.stages.forEach((x, i) => t.steps.push({ id: uid(), kind: 'stage', round: i + 1, ai: x.ai, status: 'pending', attempts: 0 }));

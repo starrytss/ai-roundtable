@@ -3,12 +3,16 @@ import { renderChat, chatMarkdown, texts, toggleExpand, rememberToggle, MODES } 
 import { renderComposer, bindComposer, autosize, refreshCheck, req, lastPreview, renderHL, renderExtras } from './composer.js';
 import { bindImages, addToQueue, renderQueueCount, openQueue, bindQueue, openSearch, bindSearch, renderTags, editTags, toggleFavorite, openAnon, bindAnon, addSeat } from './phase4.js';
 import { bindTeam } from './team.js';
+import { startI18n, tr } from './i18n.js';
 import { openRelay, bindRelay, openMaterials, bindMaterials, openOutput, bindOutput, openFiles, bindFiles, openDiff, bindDiff, branchFrom } from './phase3.js';
 import { openPreview, openAISettings, saveAI, openSetup, bindSetup, openData, bindData, bindProject, openBrief, bindBrief, openMem, bindMem, openAnalyze, bindAnalyze, bindMemList } from './dialogs.js';
+
+startI18n(localStorage.lang || 'en');
 
 /* ---------- 載入與更新 ---------- */
 async function load() {
   const st = await api('/api/state');
+  if (st.settings.lang !== localStorage.lang) { localStorage.lang = st.settings.lang; location.reload(); return; }   // 語言改了（或第一次開啟）就用新語言重新載入
   S.D = st;
   if (!P()) S.pid = st.projects[0] && st.projects[0].id;
   const p = P(); if (p && !p.chats.find(c => c.id === S.cid)) S.cid = p.chats[0] && p.chats[0].id;
@@ -58,10 +62,10 @@ function clock() {
 }
 function notifyDone() {
   if (!document.hidden) return;
-  document.title = '✓ 討論結束 · AI圓桌會議';
-  if (window.Notification && Notification.permission === 'granted') new Notification('AI圓桌會議：討論結束', { body: S.chat ? S.chat.title : '' });
+  document.title = tr('✓ 討論結束 · AI圓桌會議');
+  if (window.Notification && Notification.permission === 'granted') new Notification(tr('AI圓桌會議：討論結束'), { body: S.chat ? S.chat.title : '' });
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) document.title = 'AI圓桌會議 · 山姆蛋實驗室'; });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) document.title = tr('AI圓桌會議 · 山姆蛋實驗室'); });
 
 // 手動貼上：綁定步驟編號；看的是別的對話時也會標示這是哪個對話的步驟
 let manualStep = null;
@@ -222,6 +226,12 @@ $('#addseat').onclick = () => addSeat(() => { openAISettings(); renderComposer()
 
 /* ---------- 深淺色 ---------- */
 function applyTheme() { document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); }
+// 語言：介面與送給 AI 的提示一起切換；改完重新載入，進行中的討論不受影響
+const LANG_NAME = { en: 'English', 'zh-TW': '中文' };
+const setLang = async lang => { await api('/api/settings', { lang }); localStorage.lang = lang; location.reload(); };
+$('#langname').textContent = localStorage.lang === 'zh-TW' ? LANG_NAME.en : LANG_NAME['zh-TW'];
+$('#langbtn').onclick = () => setLang(localStorage.lang === 'zh-TW' ? 'en' : 'zh-TW');
+document.querySelectorAll('[data-lang]').forEach(b => { b.classList.toggle('gold', b.dataset.lang === (localStorage.lang || 'en')); b.onclick = () => b.dataset.lang !== localStorage.lang && setLang(b.dataset.lang); });
 $('#theme').onclick = () => { localStorage.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; applyTheme(); };
 applyTheme();
 

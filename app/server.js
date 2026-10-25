@@ -16,9 +16,10 @@ const crypto = require('crypto');
 const IMG_TYPES = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif' };
 const { diff } = require('./lib/diff');
 const { branchChat, copyWorkspace } = require('./lib/branch');
+const EN = require('./lib/prompts-en');
 
 // 分工接力的團隊範本：職務與 AI 分開，同一個職務可以換不同 AI
-const defaultRelays = () => [
+const defaultRelays = lang => lang === 'en' ? EN.relays() : [
   { name: '研究 → 企劃 → 審查 → 整理', stages: [
     { role: '資料研究', ai: 'claude', task: '蒐集與問題相關的事實、數據與案例，附上來源網址，標明哪些是推論。', accept: '每個重要事實都有來源或標明推論', input: 'question' },
     { role: '企劃提案', ai: 'chatgpt', task: '根據研究結果提出具體方案，包含步驟、時程與預算。', accept: '方案可以直接執行，數字有依據', input: 'previous' },
@@ -30,7 +31,7 @@ const defaultRelays = () => [
     { role: '測試審查', ai: 'claude', task: '依驗收條件逐條檢查，列出未通過與修正方式。', accept: '每條需求都有通過或未通過的結論', input: 'all' }] },
 ];
 // 研究團隊範本：一般討論時每位 AI 同時往不同方向研究，最後由主持人整合
-const defaultTeams = () => [
+const defaultTeams = lang => lang === 'en' ? EN.teams() : [
   { name: '市場調查小組', roles: { chatgpt: '市場規模、目標客群與競品', claude: '風險、法規與反對意見', gemini: '成本、預算與執行方式' }, mod: 'chatgpt' },
   { name: '產品評估小組', roles: { chatgpt: '使用者需求與體驗', claude: '技術可行性與風險', gemini: '商業模式與定價' }, mod: 'claude' },
 ];
@@ -41,7 +42,7 @@ const MAX_MATERIAL = 200000;
 const MEM_TYPES = Object.keys(MEM_LABEL);
 const localDate = () => new Date().toLocaleDateString('sv-SE');   // 本地日期 YYYY-MM-DD
 // 常用的任務簡報範本（使用者可另存自己的版本）
-const defaultBriefs = () => [
+const defaultBriefs = lang => lang === 'en' ? EN.briefs() : [
   { name: '活動企劃', fields: { goal: '', audience: '', budget: '', timeline: '', constraints: '', format: '活動提案：目標、流程、預算表、風險與備案' }, ask: ['goal', 'audience', 'budget', 'timeline'] },
   { name: '網站開發', fields: { goal: '', audience: '', budget: '', timeline: '', constraints: '', format: '需求清單、頁面架構、技術選擇與驗收條件' }, ask: ['goal', 'audience', 'timeline', 'constraints'] },
   { name: '供應商比較', fields: { goal: '', audience: '', budget: '', timeline: '', constraints: '', format: '比較表：價格、條件、風險，最後給建議' }, ask: ['goal', 'budget', 'constraints'] },
@@ -72,7 +73,14 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
   // 安裝程式記錄的「有訂閱的 AI」：第一次開啟時套用，其他設成手動貼上；只含 AI 代號，用完即刪
   const firstRun = path.join(ROOT, 'first-run.json');
   if (fs.existsSync(firstRun)) {
-    try { const chosen = JSON.parse(fs.readFileSync(firstRun, 'utf8')).auto || []; if (!store.db.settings.setupDone) for (const [k, a] of Object.entries(store.db.settings.ais)) a.mode = chosen.includes(k) ? 'auto' : 'manual'; store.save(); } catch {}
+    try {
+      const fr = JSON.parse(fs.readFileSync(firstRun, 'utf8')), chosen = fr.auto || [];
+      if (!store.db.settings.setupDone) {
+        for (const [k, a] of Object.entries(store.db.settings.ais)) a.mode = chosen.includes(k) ? 'auto' : 'manual';
+        if (['en', 'zh-TW'].includes(fr.lang)) store.db.settings.lang = fr.lang;   // 安裝程式選的語言
+      }
+      store.save();
+    } catch {}
     fs.rmSync(firstRun, { force: true });
   }
   const engine = createEngine({ store, skills: () => scanSkills(), onIdle: () => processQueue() });
@@ -157,7 +165,7 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
       caps: providers.capabilities(a), imageNote: (providers.PROVIDERS[a.provider] || {}).imageNote || '', modelNote: (providers.PROVIDERS[a.provider] || {}).modelNote || '',
       records: (providers.PROVIDERS[a.provider] || {}).records || [], untested: !!(providers.PROVIDERS[a.provider] || {}).untested, argvPrompt: !!(providers.PROVIDERS[a.provider] || {}).argvPrompt }]));
     return {
-      version: VERSION, settings: { ...s, ais, briefTemplates: s.briefTemplates || defaultBriefs(), relayTemplates: s.relayTemplates || defaultRelays(), teamTemplates: s.teamTemplates || defaultTeams() },
+      version: VERSION, settings: { ...s, ais, briefTemplates: s.briefTemplates || defaultBriefs(s.lang), relayTemplates: s.relayTemplates || defaultRelays(s.lang), teamTemplates: s.teamTemplates || defaultTeams(s.lang) },
       outputTemplates: Object.entries(outputs.OUTPUT_TEMPLATES).map(([key, v]) => ({ key, name: v.name })), levels: providers.LEVELS.map(k => ({ key: k, label: providers.LEVEL_LABEL[k] })),
       briefFields: BRIEF_FIELDS, memLabels: MEM_LABEL, queue: (db().queue || []).slice(-50).map(({ req, ...q }) => ({ ...q, q: String(req?.q || '').slice(0, 60), ids: req?.ids, mode: req?.mode })), queuePaused: !!db().queuePaused,
       projects: db().projects.map(p => ({ ...p, materials: (p.materials || []).map(({ text, ...m }) => ({ ...m, chars: (text || '').length })), chats: p.chats.map(c => ({ id: c.id, title: c.title, updated: c.updated, status: (c.turns.at(-1) || {}).status, tags: c.tags || [], branchOf: c.branchOf ? { cid: c.branchOf.cid, title: c.branchOf.title } : undefined })).sort((a, b) => b.updated - a.updated) })),
@@ -201,11 +209,11 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
       case '/api/memory/delete': if (p) { p.memories = p.memories.filter(x => x.id !== b.id); store.save(); } return { memories: p ? p.memories : [] };
       case '/api/briefs/save': {
         const name = String(b.name || '').trim().slice(0, 40); if (!name) throw new Error('請輸入範本名稱');
-        S.briefTemplates = (S.briefTemplates || defaultBriefs()).filter(x => x.name !== name);
+        S.briefTemplates = (S.briefTemplates || defaultBriefs(S.lang)).filter(x => x.name !== name);
         S.briefTemplates.push({ name, fields: Object.fromEntries(BRIEF_FIELDS.map(([k]) => [k, String(b.fields?.[k] || '').slice(0, 2000)])), ask: (b.ask || []).filter(k => BRIEF_FIELDS.some(([f]) => f === k)) });
         store.save(); return { briefTemplates: S.briefTemplates };
       }
-      case '/api/briefs/delete': S.briefTemplates = (S.briefTemplates || defaultBriefs()).filter(x => x.name !== b.name); store.save(); return { briefTemplates: S.briefTemplates };
+      case '/api/briefs/delete': S.briefTemplates = (S.briefTemplates || defaultBriefs(S.lang)).filter(x => x.name !== b.name); store.save(); return { briefTemplates: S.briefTemplates };
       case '/api/turn/intervene': { const r = engine.intervene(b); return { turnId: r.turnId }; }
       case '/api/turn/analyze': { const r = engine.analyze(b); return { turnId: r.turnId }; }
 
@@ -219,6 +227,7 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
           if (typeof v.isolate === 'boolean') a.isolate = v.isolate;
           if (a.provider === 'custom' && !a.cmd) a.mode = 'manual';
         }
+        if (['en', 'zh-TW'].includes(b.lang)) S.lang = b.lang;
         if (b.privacy) { if (typeof b.privacy.redact === 'boolean') S.privacy.redact = b.privacy.redact; if (typeof b.privacy.reduceTraffic === 'boolean') S.privacy.reduceTraffic = b.privacy.reduceTraffic; }
         if (b.limits) for (const [k, lo, hi] of [['maxCalls', 1, 100], ['maxRetries', 0, 10], ['timeoutMin', 1, 60], ['budgetChars', 4000, 200000], ['maxMinutes', 1, 600]]) if (Number.isFinite(+b.limits[k])) S.limits[k] = Math.max(lo, Math.min(hi, Math.round(+b.limits[k])));
         store.save(); return stateView();
@@ -237,7 +246,7 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
       case '/api/setup/test': {
         const a = S.ais[b.id]; if (!a) throw new Error('找不到這個 AI');
         if (a.mode === 'manual') return { ok: false, text: '手動貼上模式不需要測試。' };
-        const r = await diagnose.test(a, { workdir: workdirFor(paths.workRoot, 'diagnose00', 'connection') });
+        const r = await diagnose.test(a, { workdir: workdirFor(paths.workRoot, 'diagnose00', 'connection'), lang: S.lang });
         diag()[b.id] = r; if (r.rateLimit) (S.usage = S.usage || {})[b.id] = { rateLimit: r.rateLimit, at: Date.now() };
         store.save(); return r;
       }
@@ -338,24 +347,24 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
         const name = String(b.name || '').trim().slice(0, 40); if (!name) throw new Error('請輸入範本名稱');
         const stages = (b.stages || []).slice(0, 8).map(x => ({ role: String(x.role || '').slice(0, 40), ai: S.ais[x.ai] ? x.ai : '', task: String(x.task || '').slice(0, 2000), accept: String(x.accept || '').slice(0, 1000), input: ['previous', 'all', 'question'].includes(x.input) ? x.input : 'previous' }));
         if (!stages.length) throw new Error('範本至少要有一棒');
-        S.relayTemplates = (S.relayTemplates || defaultRelays()).filter(x => x.name !== name); S.relayTemplates.push({ name, stages });
+        S.relayTemplates = (S.relayTemplates || defaultRelays(S.lang)).filter(x => x.name !== name); S.relayTemplates.push({ name, stages });
         store.save(); return { relayTemplates: S.relayTemplates };
       }
       case '/api/teams/save': {
         const name = String(b.name || '').trim().slice(0, 40); if (!name) throw new Error('請輸入範本名稱');
         const roles = cleanRoles(b.roles, S.ais); if (!Object.keys(roles).length) throw new Error('範本至少要有一位 AI 的職務');
         const t = { name, roles }; if (S.ais[b.mod]) t.mod = b.mod;
-        S.teamTemplates = (S.teamTemplates || defaultTeams()).filter(x => x.name !== name); S.teamTemplates.push(t);
+        S.teamTemplates = (S.teamTemplates || defaultTeams(S.lang)).filter(x => x.name !== name); S.teamTemplates.push(t);
         store.save(); return { teamTemplates: S.teamTemplates };
       }
-      case '/api/teams/delete': S.teamTemplates = (S.teamTemplates || defaultTeams()).filter(x => x.name !== b.name); store.save(); return { teamTemplates: S.teamTemplates };
+      case '/api/teams/delete': S.teamTemplates = (S.teamTemplates || defaultTeams(S.lang)).filter(x => x.name !== b.name); store.save(); return { teamTemplates: S.teamTemplates };
       case '/api/chat/team': {   // 這個對話的分工：之後在這個對話提問都沿用，換題目時再改
         const c = findC(p, b.cid); if (!c) throw new Error('找不到對話');
         const roles = cleanRoles(b.roles, S.ais);
         if (Object.keys(roles).length) c.team = { roles }; else delete c.team;
         store.save(); return { team: c.team || null };
       }
-      case '/api/relay/delete': S.relayTemplates = (S.relayTemplates || defaultRelays()).filter(x => x.name !== b.name); store.save(); return { relayTemplates: S.relayTemplates };
+      case '/api/relay/delete': S.relayTemplates = (S.relayTemplates || defaultRelays(S.lang)).filter(x => x.name !== b.name); store.save(); return { relayTemplates: S.relayTemplates };
       case '/api/attachments/add': {
         const c = findC(p, b.cid); if (!c) throw new Error('找不到對話');
         const mime = String(b.mime || ''), ext = IMG_TYPES[mime]; if (!ext) throw new Error('只接受 PNG、JPG、WebP、GIF 圖片');
