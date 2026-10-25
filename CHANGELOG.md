@@ -7,8 +7,8 @@ v1.0 to v1.4 were developed inside the samtss-lab repository. The full commit hi
 ## v1.6.0 (2026-10-25)
 
 Installer: [AI_Roundtable_Setup_v1.6.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.6.0/AI_Roundtable_Setup_v1.6.0.zip)
-SHA-256: `@@SHA@@`
-Source: tag `v1.6.0` (commit `@@COMMIT@@`; `npm run build` on this commit produces the same zip)
+SHA-256: `788b92c3825717eb6a6928a4b0f1abf618e086dc3dbb73d67f4d94f530ec6f3c`
+Source: tag `v1.6.0` (commit `f3ad16884572d772881b1e97930cb14ce4bef68f`; `npm run build` on this commit produces the same zip)
 
 English and Chinese interface
 - The whole interface is available in English and Traditional Chinese: buttons, dialogs, error messages, notes about each AI's permissions, dates and the exported Markdown
