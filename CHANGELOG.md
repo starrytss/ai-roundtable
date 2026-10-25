@@ -4,6 +4,25 @@
 
 v1.0 到 v1.4 是在 samtss-lab 專案裡開發的，搬到這個專案時保留了完整的提交紀錄，但提交編號不同；安裝包內 `BUILD.json` 記錄的是原本的提交。之後的版本用同一個提交執行 `npm run build` 會得到位元組完全相同的 zip。
 
+## v1.5.0（2026-10-25）
+
+安裝包：[AI_Roundtable_Setup_v1.5.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.5.0/AI_Roundtable_Setup_v1.5.0.zip)
+SHA-256：`81c304f69f9495eb3238e37db22d60a3044ad460abf11de67bff6548c2d3fce4`
+原始碼：本專案的標籤 `v1.5.0`（提交 `0c157197e183929ae79ece1b9e5dc06c40e3ffc4`，用這個提交執行 `npm run build` 會得到相同的 zip）
+
+這個對話的分工
+- 輸入區新增「👥 分工」：為每位 AI 指定這次的職務，大家同時往不同方向研究；第 2 輪起每段發言標上職務，並請 AI 從自己的職務角度補充或質疑其他方向
+- 主持人拿到完整的分工清單，先分別整理每個方向的重點，再說明互相支持或衝突的地方，最後給出整合後的建議與待查證事項；主持人整合時不帶自己的研究方向
+- 分工存在對話上，只套用在這個對話並取代 AI 設定裡的角色；開新對話不會帶過去，建立分支時一起複製；重試與再討論一輪沿用同一題的分工
+- 研究團隊範本：內建「市場調查小組」「產品評估小組」，可另存與刪除
+- 同一家 AI 多席各負責一個方向（v1.4 的新增席位）
+- 送出前的檢查列與回答卡片標出每位 AI 的職務
+- 分工接力仍使用每一棒自己的職務，不套用這個分工
+- 實測：真實帳號 ChatGPT、Claude、Claude 席位各負責一個方向，討論 2 輪後由 Claude 整合，7 次呼叫全部成功
+
+修正
+- 「只用文字」權限的提示不再重複同一句話
+
 ## v1.4.0（2026-10-25）
 
 安裝包：[AI_Roundtable_Setup_v1.4.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.4.0/AI_Roundtable_Setup_v1.4.0.zip)
