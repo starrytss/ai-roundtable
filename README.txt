@@ -1,4 +1,32 @@
-﻿AI圓桌會議 v1.5
+﻿AI Roundtable v1.6
+==================
+by SamEgg Lab
+English guide and source code: https://github.com/starrytss/ai-roundtable
+（中文說明在下方）
+
+Seat the ChatGPT, Claude, Gemini and Grok subscriptions you already have around one table: each AI proposes, they challenge each other, and a moderator writes the conclusion.
+Every AI runs through the official command-line tool on your computer with your own account. No API keys needed.
+
+[Install]
+1. Extract this folder (don't run anything from inside the zip)
+2. Double-click Setup.bat and choose English or 中文 first
+   - If Windows shows "Windows protected your PC", click "More info" → "Run anyway"
+3. Choose the AIs you use. Before downloading an official installer, Setup shows its URL and waits for your confirmation
+4. An "AI Roundtable" shortcut appears on your desktop. The first launch runs a connection check; click "Test" to confirm each AI really answers
+
+[Language]
+- The interface and the prompts sent to the AIs follow the language you choose; the AIs answer in the language you ask in
+- Switch any time with the language button at the bottom of the sidebar
+
+[Where your data is]
+- Conversations and settings: %LOCALAPPDATA%\AI-Roundtable (encrypted with your Windows account)
+- Files created by AIs: %LOCALAPPDATA%\AI-Roundtable\workspaces
+- Uninstall: %LOCALAPPDATA%\Roundtable\uninstall.bat
+
+This tool is not an official product of OpenAI, Anthropic, Google or xAI.
+
+
+AI圓桌會議 v1.6
 ================
 山姆蛋實驗室 SamEgg Lab 製作
 使用說明與常見問題：https://samtss.com/tools/ai-roundtable/
@@ -45,6 +73,11 @@
 - 分工只套用在這個對話，會取代 AI 設定裡的角色；可以存成研究團隊範本（內建「市場調查小組」「產品評估小組」）
 - 同一家 AI 想做兩個方向：先在 AI 設定「新增 AI 席位」，再在分工裡各填一個職務
 - 送出前的檢查列與每張回答卡片都會標出職務；重試與再討論一輪沿用同一組分工
+
+【v1.6 新增】
+- 介面語言：可選英文或中文；安裝時先選，之後在側欄最下方的語言按鈕切換
+- 送給 AI 的提示跟著介面語言，AI 會用你提問的語言回答
+- 升級前已經在用的程式維持中文
 
 【權限】
 - Claude：工具清單與檔案範圍由 Claude Code 強制
