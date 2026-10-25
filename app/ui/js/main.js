@@ -2,6 +2,7 @@ import { $, S, api, esc, ai, toast, copy, savePref, when, secs, P, tokenParam, S
 import { renderChat, chatMarkdown, texts, toggleExpand, rememberToggle, MODES } from './chat.js';
 import { renderComposer, bindComposer, autosize, refreshCheck, req, lastPreview, renderHL, renderExtras } from './composer.js';
 import { bindImages, addToQueue, renderQueueCount, openQueue, bindQueue, openSearch, bindSearch, renderTags, editTags, toggleFavorite, openAnon, bindAnon, addSeat } from './phase4.js';
+import { bindTeam } from './team.js';
 import { openRelay, bindRelay, openMaterials, bindMaterials, openOutput, bindOutput, openFiles, bindFiles, openDiff, bindDiff, branchFrom } from './phase3.js';
 import { openPreview, openAISettings, saveAI, openSetup, bindSetup, openData, bindData, bindProject, openBrief, bindBrief, openMem, bindMem, openAnalyze, bindAnalyze, bindMemList } from './dialogs.js';
 
@@ -16,7 +17,7 @@ async function load() {
   if (!st.settings.setupDone && !shown) { shown = true; openSetup(); }
   else if ((st.privacy.legacyPlaintext || st.privacy.recovered || st.privacy.encryption === 'failed') && !noticed) { noticed = true; openData(); }
 }
-let lastKey = '', wasRunning = false, shown = false, noticed = false;
+let lastKey = '', lastTeam = '', wasRunning = false, shown = false, noticed = false;
 
 function renderSide() {
   $('#proj').innerHTML = S.D.projects.map(p => `<option value="${p.id}" ${p.id === S.pid ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
@@ -43,6 +44,8 @@ async function tick() {
   wasRunning = !!S.run;
   const key = JSON.stringify([S.chat, here && S.run, S.D.settings.ais]);
   if (key !== lastKey) { lastKey = key; renderChat(); renderTags(); }
+  const tk = JSON.stringify([S.cid, S.chat && S.chat.team]);   // 換對話或分工改了，輸入區的分工標籤與送出檢查跟著更新
+  if (tk !== lastTeam) { lastTeam = tk; renderExtras(); refreshCheck(); }
   clock();
 }
 function clock() {
@@ -208,7 +211,7 @@ $('#aicheck').onclick = () => { $('#dlgAI').close(); openSetup(); };
 $('#dataset').onclick = openData;
 bindSetup(load); bindData(load); bindProject(load); bindBrief(() => { renderExtras(); refreshCheck(); }); bindMem(load); bindAnalyze(tick); bindMemList(load);
 bindComposer({ onSend: sendQ, onPreview: () => openPreview(doSend), openAI: openAISettings, openBrief, openRelay, openMaterials });
-bindRelay(); bindMaterials(); bindOutput(tick); bindFiles(); bindDiff(load);
+bindRelay(); bindMaterials(); bindOutput(tick); bindFiles(); bindDiff(load); bindTeam(load);
 bindImages(); bindQueue(load); bindSearch(load); bindAnon();
 $('#queuebtn').onclick = () => addToQueue(load);
 $('#queueset').onclick = async () => { await load(); openQueue(); };

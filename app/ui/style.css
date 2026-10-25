@@ -323,3 +323,8 @@ dialog .df { flex-wrap:wrap; align-items:center; }
 .caps span.yes { color:var(--ok); } .caps span.no { color:var(--danger); }
 .sres { border-bottom:1px solid var(--line); padding:8px 0; cursor:pointer; }
 .sres:hover { background:var(--sunk); }
+
+/* ---------- 這個對話的分工 ---------- */
+.team-row { display:grid; grid-template-columns:minmax(150px, auto) 1fr; gap:10px; align-items:center; margin:8px 0; }
+.team-row .sk { display:flex; align-items:center; gap:6px; white-space:nowrap; }
+.team-row.off .field { opacity:.5; }

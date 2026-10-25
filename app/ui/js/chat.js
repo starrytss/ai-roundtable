@@ -30,7 +30,8 @@ function meta(s) {
 function card(t, s, extra = '') {
   const key = s.id, long = (s.text || '').length > 900, open = expanded.has(key);
   texts[key] = s.text;
-  const head = `<div class="hd">${av(s.ai)}<span class="nm">${esc(ai(s.ai).name)}</span>${extra}<span class="tm">${s.ms ? secs(s.ms) : ''}</span>`;
+  const role = s.kind === 'answer' && t.mode !== 'relay' && t.roles && t.roles[s.ai];   // 這一題的分工
+  const head = `<div class="hd">${av(s.ai)}<span class="nm">${esc(ai(s.ai).name)}</span>${role ? `<span class="mtag" title="${esc(role)}">${esc(role.length > 16 ? role.slice(0, 16) + '…' : role)}</span>` : ''}${extra}<span class="tm">${s.ms ? secs(s.ms) : ''}</span>`;
   if (['error', 'stopped', 'interrupted', 'skipped'].includes(s.status)) {
     const e = s.error || {}, label = { error: '失敗', stopped: '已中止', interrupted: '已中斷', skipped: '已略過' }[s.status];
     const btns = [];

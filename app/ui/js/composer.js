@@ -1,6 +1,7 @@
 // 輸入區：選 AI、模式、主持人，送出前一定看得到「會傳給誰、預計幾次呼叫」
 import { $, S, api, esc, ai, av, col, toast, savePref, badge, P } from './core.js';
 import { imageChips, clearImages, imageLabel } from './phase4.js';
+import { teamChip, teamRoles, openTeam, clearTeam } from './team.js';
 
 const keys = () => Object.keys(S.D.settings.ais);
 // @Claude、@ChatGPT：只傳給被點名的 AI（這次提問暫時取代上方勾選）
@@ -18,7 +19,7 @@ export function req(extra = {}) {
   return { pid: S.pid, cid: S.cid, q: $('#q').value.trim(), ids, mode: $('#mode').value, rounds: +$('#rounds').value, mod,
     modOutside: men.length ? false : !!p.modOutside, include: p.include || {}, redact: p.redact ?? S.D.settings.privacy.redact,
     pause: !!p.pause, quote: p.quote || null, brief: p.brief || null,
-    stages: relay ? p.stages || [] : undefined, review: p.review !== false, outputTemplate: p.outputTemplate || '', materials: p.materials || null, images: p.images || [], ...extra };
+    stages: relay ? p.stages || [] : undefined, roles: relay ? undefined : teamRoles() || undefined, review: p.review !== false, outputTemplate: p.outputTemplate || '', materials: p.materials || null, images: p.images || [], ...extra };
 }
 
 export function renderComposer() {
@@ -38,7 +39,7 @@ export function renderComposer() {
   const relay = $('#mode').value === 'relay', solo = !relay && p.ids.length < 2;
   $('#rounds').disabled = $('#mod').disabled = solo || relay; $('#mode').disabled = solo && !relay;
   $('#rounds').hidden = $('#mod').hidden = $('#mod').previousElementSibling.hidden = relay;
-  $('#pause').checked = !!p.pause; $('#pausewrap').hidden = solo || relay; $('#relaybtn').hidden = !relay;
+  $('#pause').checked = !!p.pause; $('#pausewrap').hidden = solo || relay; $('#relaybtn').hidden = !relay; $('#teambtn').hidden = relay;
   $('#outtpl').innerHTML = '<option value="">成果：不指定</option>' + (S.D.outputTemplates || []).map(t => `<option value="${t.key}">成果：${esc(t.name)}</option>`).join('');
   $('#outtpl').value = p.outputTemplate || '';
   renderExtras(); refreshCheck();
@@ -46,7 +47,7 @@ export function renderComposer() {
 
 // 輸入框上方的附加項目：引用的內容、任務簡報
 export function renderExtras() {
-  const p = S.pref, chips = [imageChips()].filter(Boolean);
+  const p = S.pref, chips = [teamChip(), imageChips()].filter(Boolean);
   if (p.quote) chips.push(`<span class="skchip url" title="${esc(p.quote.text)}"><span class="ic">❝</span><b>引用 ${esc(ai(p.quote.ai).name)}${p.quote.round ? ` 第 ${p.quote.round} 輪` : ''}</b><small>${esc(p.quote.text.slice(0, 40))}${p.quote.text.length > 40 ? '…' : ''}</small><button data-rmquote title="移除引用">✕</button></span>`);
   if ($('#mode').value === 'relay') {
     const st = p.stages || [];
@@ -71,7 +72,7 @@ async function doCheck() {
   const pv = await api('/api/preview', r); if (seq !== pvSeq) return;
   if (pv.error) { box.innerHTML = `<span class="warn">${esc(pv.error)}</span>`; lastPreview = null; return; }
   lastPreview = pv;
-  const people = pv.recipients.map(x => `<span class="rcp">${av(x.ai)}<b>${esc(x.name)}</b>${x.outside ? '<span class="mtag">只主持</span>' : ''}${badge(x.guarantee)}${x.image ? `<span class="mtag" style="${['none', 'unknown'].includes(x.image) ? 'color:var(--danger)' : ''}">🖼 ${imageLabel(x.image)}</span>` : ''}</span>`).join('');
+  const people = pv.recipients.map(x => `<span class="rcp">${av(x.ai)}<b>${esc(x.name)}</b>${x.outside ? '<span class="mtag">只主持</span>' : ''}${x.role ? `<span class="mtag" title="${esc(x.role)}">職務：${esc(x.role.length > 14 ? x.role.slice(0, 14) + '…' : x.role)}</span>` : ''}${badge(x.guarantee)}${x.image ? `<span class="mtag" style="${['none', 'unknown'].includes(x.image) ? 'color:var(--danger)' : ''}">🖼 ${imageLabel(x.image)}</span>` : ''}</span>`).join('');
   const e = pv.estimate, men = mentioned();
   let h = `<span>${men.length ? '只傳給（@點名）：' : '傳送給：'}</span>${people}<span>· 預計 <b>${e.total}</b> 次 CLI 呼叫${e.manual ? `（其中手動貼上 ${e.manual} 次）` : ''}</span>`
     + `<span class="lnk" data-preview>查看傳送內容</span>`;
@@ -107,10 +108,13 @@ export function bindComposer({ onSend, onPreview, openAI, openBrief, openRelay, 
     if (e.target.closest('[data-editbrief]')) return openBrief();
     if (e.target.closest('[data-editrelay]')) return openRelay();
     if (e.target.closest('[data-editmat]')) return openMaterials();
+    if (e.target.closest('[data-editteam]')) return openTeam();
+    if (e.target.closest('[data-rmteam]')) return clearTeam();
   };
   $('#outtpl').onchange = e => { S.pref.outputTemplate = e.target.value; savePref(); refreshCheck(); };
   $('#relaybtn').onclick = () => openRelay();
   $('#matbtn').onclick = () => openMaterials();
+  $('#teambtn').onclick = () => openTeam();
   $('#ais').onclick = e => {
     const b = e.target.closest('[data-ai]'); if (!b) return;
     const k = b.dataset.ai, p = S.pref;
@@ -120,7 +124,7 @@ export function bindComposer({ onSend, onPreview, openAI, openBrief, openRelay, 
   };
   $('#mode').onchange = e => { S.pref.mode = e.target.value; savePref(); renderComposer(); if (e.target.value === 'relay' && !(S.pref.stages || []).length) openRelay(); };
   $('#rounds').onchange = e => { S.pref.rounds = e.target.value; savePref(); refreshCheck(); };
-  $('#mod').onchange = e => { S.pref.mod = e.target.value; S.pref.modOutside = !S.pref.ids.includes(e.target.value); savePref(); refreshCheck(); };
+  $('#mod').onchange = e => { S.pref.mod = e.target.value; S.pref.modOutside = !S.pref.ids.includes(e.target.value); savePref(); renderExtras(); refreshCheck(); };
   $('#check').onclick = e => {
     if (e.target.closest('[data-preview]')) return onPreview();
     if (e.target.closest('[data-openai]')) return openAI();

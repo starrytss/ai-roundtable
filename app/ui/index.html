@@ -52,6 +52,7 @@
         <span id="ais"></span>
         <button class="sel" id="skbtn" title="瀏覽已安裝的技能">⚡ 技能</button>
         <button class="sel" id="briefbtn" title="任務簡報：目標、對象、預算、時程">📋 簡報</button>
+        <button class="sel" id="teambtn" title="這個對話每位 AI 的職務，最後由主持人整合">👥 分工</button>
         <button class="sel" id="matbtn" title="共用資料區：文件、網頁、參考資料">📎 資料</button>
         <button class="sel" id="imgbtn" title="附上圖片或設計稿（PNG、JPG、WebP、GIF）">🖼 圖片</button><input type="file" id="imgfile" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
         <select id="outtpl" class="sel" title="成果格式（最後一步依這個格式輸出）"></select>
@@ -144,6 +145,12 @@
   <div class="dh"><span>分工接力</span><button class="icon" data-close>✕</button></div>
   <div class="db" id="relayBody"></div>
   <div class="df"><button class="btn" id="relaySave">另存成團隊範本</button><span class="grow"></span><button class="btn" data-close>取消</button><button class="btn gold" id="relayUse">套用</button></div>
+</dialog>
+
+<dialog id="dlgTeam">
+  <div class="dh"><span>這個對話的分工</span><button class="icon" data-close>✕</button></div>
+  <div class="db" id="teamBody"></div>
+  <div class="df"><button class="btn" id="teamSave">另存成研究團隊範本</button><span class="grow"></span><button class="btn" data-close>取消</button><button class="btn gold" id="teamUse">套用</button></div>
 </dialog>
 
 <dialog id="dlgMat">
