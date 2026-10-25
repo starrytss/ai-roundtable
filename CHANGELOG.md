@@ -7,8 +7,8 @@ v1.0 to v1.4 were developed inside the samtss-lab repository. The full commit hi
 ## v1.6.1 (2026-10-26)
 
 Installer: [AI_Roundtable_Setup_v1.6.1.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.6.1/AI_Roundtable_Setup_v1.6.1.zip)
-SHA-256: `@@SHA@@`
-Source: tag `v1.6.1` (commit `@@COMMIT@@`; `npm run build` on this commit produces the same zip)
+SHA-256: `2873d01d4248eb972c7fce34def34c54f469abb8f26f623f9c84a24be1029b09`
+Source: tag `v1.6.1` (commit `cb498a9936a49e7b68a506a999649c94018711d2`; `npm run build` on this commit produces the same zip)
 
 Interface redesign
 - Warmer colors in light and dark mode (ivory and warm gray, warm charcoal in dark mode), with gold kept as the accent
