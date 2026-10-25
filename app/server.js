@@ -29,6 +29,13 @@ const defaultRelays = () => [
     { role: '實作', ai: 'chatgpt', task: '依需求完成實作或詳細設計。', accept: '逐條對應需求', input: 'previous' },
     { role: '測試審查', ai: 'claude', task: '依驗收條件逐條檢查，列出未通過與修正方式。', accept: '每條需求都有通過或未通過的結論', input: 'all' }] },
 ];
+// 研究團隊範本：一般討論時每位 AI 同時往不同方向研究，最後由主持人整合
+const defaultTeams = () => [
+  { name: '市場調查小組', roles: { chatgpt: '市場規模、目標客群與競品', claude: '風險、法規與反對意見', gemini: '成本、預算與執行方式' }, mod: 'chatgpt' },
+  { name: '產品評估小組', roles: { chatgpt: '使用者需求與體驗', claude: '技術可行性與風險', gemini: '商業模式與定價' }, mod: 'claude' },
+];
+// 只保留存在的 AI 與有填的職務
+const cleanRoles = (roles, ais) => Object.fromEntries(Object.entries(roles || {}).filter(([k]) => ais[k]).map(([k, v]) => [k, String(v || '').trim().slice(0, 200)]).filter(([, v]) => v));
 const MAX_MATERIAL = 200000;
 
 const MEM_TYPES = Object.keys(MEM_LABEL);
@@ -150,7 +157,7 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
       caps: providers.capabilities(a), imageNote: (providers.PROVIDERS[a.provider] || {}).imageNote || '', modelNote: (providers.PROVIDERS[a.provider] || {}).modelNote || '',
       records: (providers.PROVIDERS[a.provider] || {}).records || [], untested: !!(providers.PROVIDERS[a.provider] || {}).untested, argvPrompt: !!(providers.PROVIDERS[a.provider] || {}).argvPrompt }]));
     return {
-      version: VERSION, settings: { ...s, ais, briefTemplates: s.briefTemplates || defaultBriefs(), relayTemplates: s.relayTemplates || defaultRelays() },
+      version: VERSION, settings: { ...s, ais, briefTemplates: s.briefTemplates || defaultBriefs(), relayTemplates: s.relayTemplates || defaultRelays(), teamTemplates: s.teamTemplates || defaultTeams() },
       outputTemplates: Object.entries(outputs.OUTPUT_TEMPLATES).map(([key, v]) => ({ key, name: v.name })), levels: providers.LEVELS.map(k => ({ key: k, label: providers.LEVEL_LABEL[k] })),
       briefFields: BRIEF_FIELDS, memLabels: MEM_LABEL, queue: (db().queue || []).slice(-50).map(({ req, ...q }) => ({ ...q, q: String(req?.q || '').slice(0, 60), ids: req?.ids, mode: req?.mode })), queuePaused: !!db().queuePaused,
       projects: db().projects.map(p => ({ ...p, materials: (p.materials || []).map(({ text, ...m }) => ({ ...m, chars: (text || '').length })), chats: p.chats.map(c => ({ id: c.id, title: c.title, updated: c.updated, status: (c.turns.at(-1) || {}).status, tags: c.tags || [], branchOf: c.branchOf ? { cid: c.branchOf.cid, title: c.branchOf.title } : undefined })).sort((a, b) => b.updated - a.updated) })),
@@ -333,6 +340,20 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
         if (!stages.length) throw new Error('範本至少要有一棒');
         S.relayTemplates = (S.relayTemplates || defaultRelays()).filter(x => x.name !== name); S.relayTemplates.push({ name, stages });
         store.save(); return { relayTemplates: S.relayTemplates };
+      }
+      case '/api/teams/save': {
+        const name = String(b.name || '').trim().slice(0, 40); if (!name) throw new Error('請輸入範本名稱');
+        const roles = cleanRoles(b.roles, S.ais); if (!Object.keys(roles).length) throw new Error('範本至少要有一位 AI 的職務');
+        const t = { name, roles }; if (S.ais[b.mod]) t.mod = b.mod;
+        S.teamTemplates = (S.teamTemplates || defaultTeams()).filter(x => x.name !== name); S.teamTemplates.push(t);
+        store.save(); return { teamTemplates: S.teamTemplates };
+      }
+      case '/api/teams/delete': S.teamTemplates = (S.teamTemplates || defaultTeams()).filter(x => x.name !== b.name); store.save(); return { teamTemplates: S.teamTemplates };
+      case '/api/chat/team': {   // 這個對話的分工：之後在這個對話提問都沿用，換題目時再改
+        const c = findC(p, b.cid); if (!c) throw new Error('找不到對話');
+        const roles = cleanRoles(b.roles, S.ais);
+        if (Object.keys(roles).length) c.team = { roles }; else delete c.team;
+        store.save(); return { team: c.team || null };
       }
       case '/api/relay/delete': S.relayTemplates = (S.relayTemplates || defaultRelays()).filter(x => x.name !== b.name); store.save(); return { relayTemplates: S.relayTemplates };
       case '/api/attachments/add': {

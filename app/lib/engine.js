@@ -42,6 +42,11 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
   }
 
   // ---------- 送出前檢查：參與者、主持人、確認、呼叫次數 ----------
+  function cleanRoles(roles, ids) {
+    const out = {};
+    for (const id of ids) { const r = String(roles?.[id] || '').trim().slice(0, 200); if (r) out[id] = r; }
+    return Object.keys(out).length ? out : null;
+  }
   function normalize(req) {
     const ais = S().ais, relay = req.mode === 'relay';
     // 分工接力：每一棒有職務、負責的 AI、任務、驗收條件與要交接的內容；同一家 AI 可以擔任不同職務
@@ -57,16 +62,18 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const rounds = relay ? stages.length : solo ? 1 : Math.max(1, Math.min(4, req.rounds | 0 || 1));
     const include = {}; for (const k of SECTION_KEYS) if (typeof req.include?.[k] === 'boolean') include[k] = req.include[k];
     const quote = req.quote && String(req.quote.text || '').trim() ? { text: String(req.quote.text).slice(0, 4000), ai: ais[req.quote.ai] ? req.quote.ai : null, round: req.quote.round | 0 || null, turnId: String(req.quote.turnId || '').slice(0, 40), stepId: String(req.quote.stepId || '').slice(0, 40) } : null;
+    // 這個對話的分工：只保留參與者的職務；分工接力用每一棒自己的職務
+    const roles = relay ? null : cleanRoles(req.roles, ids);
     const brief = req.brief && typeof req.brief.fields === 'object' ? { fields: Object.fromEntries(BRIEF_FIELDS.map(([k]) => [k, String(req.brief.fields[k] || '').slice(0, 2000)])), ask: (req.brief.ask || []).filter(k => BRIEF_FIELDS.some(([f]) => f === k)), template: String(req.brief.template || '').slice(0, 60) } : null;
     return { q: String(req.q).trim(), ids, mod, modOutside, allowOutside, rounds, solo, mode: MODES.includes(req.mode) ? req.mode : 'discuss', include, redact: req.redact ?? S().privacy.redact,
-      pause: relay ? req.review !== false : !!req.pause && !solo && rounds > 1, quote, brief, relay, stages,
+      pause: relay ? req.review !== false : !!req.pause && !solo && rounds > 1, quote, brief, relay, stages, roles,
       images: Array.isArray(req.images) ? req.images.map(String).slice(0, 5) : [],
       outputTemplate: OUTPUT_TEMPLATES[req.outputTemplate] ? req.outputTemplate : '', materials: Array.isArray(req.materials) ? req.materials.map(String).slice(0, 50) : null };
   }
   function recipients(n) {
     const list = n.ids.map(id => ({ ai: id, roles: n.relay ? ['stage'] : ['participant'], stages: n.relay ? n.stages.map((x, i) => ({ ...x, n: i + 1 })).filter(x => x.ai === id).map(x => `第 ${x.n} 棒：${x.role}`) : undefined }));
     if (!n.solo && !n.relay) { const m = list.find(x => x.ai === n.mod); if (m) m.roles.push('moderator'); else list.push({ ai: n.mod, roles: ['moderator'], outside: true }); }
-    return list.map(r => { const a = S().ais[r.ai]; return { ...r, name: a.name, mode: a.mode, level: a.level, guarantee: a.mode === 'manual' ? { level: 'manual', notes: ['手動貼上：由你自己複製到它的網站'] } : providers.guarantee(a), needsAck: providers.needsAck(a) }; });
+    return list.map(r => { const a = S().ais[r.ai]; return { ...r, role: n.roles?.[r.ai] || undefined, name: a.name, mode: a.mode, level: a.level, guarantee: a.mode === 'manual' ? { level: 'manual', notes: ['手動貼上：由你自己複製到它的網站'] } : providers.guarantee(a), needsAck: providers.needsAck(a) }; });
   }
   function estimate(n, extraRounds = 0) {
     const auto = id => S().ais[id].mode === 'auto';
@@ -87,7 +94,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const n = normalize(req), { p, c } = find(req.pid, req.cid);
     if (!p) throw err('input', '找不到專案');
     const est = estimate(n);
-    const turn = { id: 'preview', q: n.q, mode: n.mode, ids: n.ids, rounds: n.rounds, steps: [], notes: [], quote: n.quote, brief: n.brief, stages: n.stages, outputTemplate: n.outputTemplate, materials: n.materials, images: pickImages(c, n.images) };
+    const turn = { id: 'preview', q: n.q, mode: n.mode, ids: n.ids, rounds: n.rounds, steps: [], notes: [], quote: n.quote, brief: n.brief, stages: n.stages, roles: n.roles || undefined, outputTemplate: n.outputTemplate, materials: n.materials, images: pickImages(c, n.images) };
     const table = new Map(), budget = S().limits.budgetChars, sk = skills();
     const per = recipients(n).map(r => {
       const ai = S().ais[r.ai], base = { project: p, chat: c || { turns: [] }, turn, ai, aiId: r.ai, names: names(), include: n.include, redact: n.redact, table, budget, skills: sk };
@@ -210,7 +217,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const { p, c } = find(req.pid, req.cid);
     if (!c) throw err('input', '找不到對話');
     const t = { id: uid(), q: n.q, at: Date.now(), mode: n.mode, rounds: n.rounds, ids: n.ids, mod: n.mod, modOutside: n.modOutside,
-      include: n.include, redact: n.redact, notes: [], steps: [], pause: n.pause, quote: n.quote, brief: n.brief, stages: n.stages || undefined, outputTemplate: n.outputTemplate, materials: n.materials, images: pickImages(c, n.images),
+      include: n.include, redact: n.redact, notes: [], steps: [], pause: n.pause, quote: n.quote, brief: n.brief, stages: n.stages || undefined, roles: n.roles || undefined, outputTemplate: n.outputTemplate, materials: n.materials, images: pickImages(c, n.images),
       levels: Object.fromEntries(recipients(n).map(r => [r.ai, r.mode === 'manual' ? 'manual' : r.level])) };
     if (n.relay) n.stages.forEach((x, i) => t.steps.push({ id: uid(), kind: 'stage', round: i + 1, ai: x.ai, status: 'pending', attempts: 0 }));
     else for (let r = 1; r <= n.rounds; r++) for (const id of n.ids) t.steps.push({ id: uid(), kind: 'answer', round: r, ai: id, status: 'pending', attempts: 0 });

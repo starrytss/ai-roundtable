@@ -71,7 +71,8 @@ function squeeze(s, n) {
   return { text: s.slice(0, head) + `\n…（中間省略 ${s.length - head - tail} 字）…\n` + s.slice(s.length - tail), cut: s.length - head - tail };
 }
 
-function rules(ai, level) {
+// teamRole：這個對話給這位 AI 的職務（取代 AI 設定裡的角色）；integrator：分工研究的主持人只負責整合
+function rules(ai, level, teamRole = '', integrator = false) {
   const can = {
     text: '只用文字回答，不要讀寫檔案、不要執行指令、不要上網。',
     web: '可以上網搜尋與讀網頁，遇到需要最新資訊或查證的內容請先搜尋，並在文末附上來源網址；不要讀寫檔案、不要執行指令。',
@@ -81,7 +82,8 @@ function rules(ai, level) {
   }[level] || '';
   const perm = ai.mode === 'manual' ? '' : `權限：${LEVEL_LABEL[level] || level}。${can}`;   // 手動貼上是使用者轉貼到網站，CLI 權限不適用
   let s = `你正在參與一個多 AI 討論（AI圓桌會議）。${perm}回答要具體、有條理，不要客套。沒有讀到的網頁或沒查到的資料請直接說明，不要假裝讀過。`;
-  if (ai.role) s += `\n你的角色：${ai.role}`;
+  if (teamRole) s += `\n你這次的職務：${teamRole}\n請專注在這個方向深入研究，其他方向由其他 AI 負責，不需要面面俱到；發現和其他方向有關的重要資訊時可以簡短提出。`;
+  else if (ai.role && !integrator) s += `\n你的角色：${ai.role}`;
   return s;
 }
 
@@ -89,6 +91,9 @@ function buildPayload({ project, chat, turn, ai, aiId, names = {}, round, kind =
   const inc = { ...DEFAULT_INCLUDE, ...include, question: true };
   const M = MODES[turn.mode] || MODES.discuss, solo = turn.ids.length === 1, idx = turn.ids.indexOf(aiId);
   const name = id => names[id] || id;
+  // 這個對話的分工：發言標上職務，讓其他 AI 與主持人知道每段是從哪個方向出發
+  const team = turn.mode !== 'relay' && turn.roles && Object.keys(turn.roles).length ? turn.roles : null;
+  const tag = id => team && team[id] ? `${name(id)}（${team[id].length > 40 ? team[id].slice(0, 40) + '…' : team[id]}）` : name(id);
   const sections = [], omitted = [];
   const add = (key, text, extra = {}) => { if (text) sections.push({ key, label: SECTION_LABEL[key] || key, text, included: !!inc[key], chars: text.length, ...extra }); };
 
@@ -109,10 +114,10 @@ function buildPayload({ project, chat, turn, ai, aiId, names = {}, round, kind =
   if (relay.length) add('skills', relay.map(sk => `【技能轉述：$${sk.name}】來源：${name(sk.ai)} 的技能檔 ${sk.file}\n請依照其中的原則與步驟回答；提到的腳本、檔案或素材你無法使用，略過即可。\n${readSkill(sk)}`).join('\n\n'), { sources: relay.map(sk => ({ name: sk.name, from: sk.ai, file: sk.file })) });
   const ok = r => (turn.steps || []).filter(s => s.kind === 'answer' && s.round === r && s.status === 'ok' && !s.superseded);
   if (turn.quote?.text) add('quote', `來自 ${name(turn.quote.ai)}${turn.quote.round ? ` 第 ${turn.quote.round} 輪` : ''}：\n${turn.quote.text}`, { required: true, included: true, label: '引用的內容' });
-  if (kind === 'summary') add('others', ok(lastRound(turn)).map(s => `【${name(s.ai)}】\n${s.text}`).join('\n\n'), { required: true, included: true });
+  if (kind === 'summary') add('others', ok(lastRound(turn)).map(s => `【${tag(s.ai)}】\n${s.text}`).join('\n\n'), { required: true, included: true });
   else if (kind === 'analysis') {
     const all = [...new Set((turn.steps || []).filter(s => s.kind === 'answer' && s.status === 'ok' && !s.superseded).map(s => s.round))].sort((a, b) => a - b);
-    const txt = all.map(r => `＝第 ${r} 輪＝\n` + ok(r).map(s => `【${name(s.ai)}】\n${s.text}`).join('\n\n')).join('\n\n');
+    const txt = all.map(r => `＝第 ${r} 輪＝\n` + ok(r).map(s => `【${tag(s.ai)}】\n${s.text}`).join('\n\n')).join('\n\n');
     const sum = (turn.steps || []).filter(s => s.kind === 'summary' && s.status === 'ok' && !s.superseded).pop();
     add('others', txt + (sum ? `\n\n＝主持人總結（${name(sum.ai)}）＝\n${sum.text}` : ''), { required: true, included: true });
     add('sources', readSources(turn).map(x => `${x.url}（${name(x.ai)} 讀取）`).join('\n') || '（沒有任何 AI 的讀取紀錄）', { required: true, included: true, label: '實際讀取過的來源' });
@@ -126,7 +131,7 @@ function buildPayload({ project, chat, turn, ai, aiId, names = {}, round, kind =
     if (step?.revision) add('revision', `使用者的修改意見：${step.revision.feedback}\n\n你上一版的產出：\n${step.revision.previous}`, { required: true, included: true, label: '退回修改' });
   }
   else if (round > 1) {
-    const others = ok(round - 1).filter(s => s.ai !== aiId).map(s => `【${name(s.ai)}】\n${s.text}`).join('\n\n');
+    const others = ok(round - 1).filter(s => s.ai !== aiId).map(s => `【${tag(s.ai)}】\n${s.text}`).join('\n\n');
     add('others', others);
     const mine = ok(round - 1).find(s => s.ai === aiId);
     if (mine) add('mine', mine.text, { label: '你上一輪的發言', included: true });
@@ -146,8 +151,10 @@ function buildPayload({ project, chat, turn, ai, aiId, names = {}, round, kind =
   const isFinal = kind === 'summary' || (kind === 'stage' && round === (turn.stages || []).length) || (kind === 'answer' && solo);
   let task = kind === 'summary' ? `你是主持人。${M.sum}` : kind === 'analysis' ? ANALYSIS_TASK : kind === 'stage' ? stageTask(turn, round)
     : (round === 1 ? (solo ? '請回答。' : M.r1(idx)) : (solo ? '請補充或修正你的回答。' : M.rn(idx)));
+  if (team && kind === 'summary') task += `\n\n這次是分工研究，每位 AI 負責不同方向：\n${turn.ids.filter(id => team[id]).map(id => `- ${name(id)}：${team[id]}`).join('\n')}\n請整合成一份完整的結論：先分別整理每個方向的重點，再說明各方向之間互相支持或衝突的地方，最後給出整合後的建議與待查證事項。不要只採用其中一個方向。`;
+  if (team && kind === 'answer' && round > 1 && team[aiId]) task += '\n請從你的職務角度，補充或質疑其他方向的發現。';
   if (tpl && isFinal) task += `\n\n【成果格式：${tpl.name}】${tpl.spec}`;
-  const head = rules(ai, kind === 'analysis' ? 'text' : (ai.level || 'web'));
+  const head = rules(ai, kind === 'analysis' ? 'text' : (ai.level || 'web'), team && kind === 'answer' ? team[aiId] || '' : '', !!team && kind !== 'answer');
   const question = `【這次的問題】\n${turn.q}` + briefText(turn.brief) + (imgNote ? `\n\n【附加圖片】\n${imgNote}` : '') + (notes ? `\n\n【使用者補充】\n${notes}` : '');
   const tail = (kind === 'answer' ? `目前是第 ${round} 輪。` : kind === 'stage' ? `目前是第 ${round} 棒（共 ${(turn.stages || []).length} 棒）。` : '') + task;
 
