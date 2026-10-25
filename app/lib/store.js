@@ -15,10 +15,10 @@ const DEFAULT_AIS = () => ({
 const DEFAULT_SETTINGS = () => ({
   ais: DEFAULT_AIS(), setupDone: false,
   privacy: { encryption: 'on', retentionDays: 0, redact: true, reduceTraffic: true },
-  limits: { maxCalls: 20, maxRetries: 2, timeoutMin: 10, budgetChars: 24000 },
+  limits: { maxCalls: 20, maxRetries: 2, timeoutMin: 10, budgetChars: 24000, maxMinutes: 60 },
 });
 const newProject = name => ({ id: uid(), name: name || '預設專案', instructions: '', memory: '', memories: [], chats: [] });
-const emptyDb = () => ({ schema: SCHEMA, settings: DEFAULT_SETTINGS(), projects: [newProject()] });
+const emptyDb = () => ({ schema: SCHEMA, settings: DEFAULT_SETTINGS(), projects: [newProject()], queue: [] });
 
 // ---------- v1.0 → v2 遷移 ----------
 const EXE = { chatgpt: 'codex', claude: 'claude', gemini: 'agy', grok: 'grok' };
@@ -57,6 +57,7 @@ function migrate(db) {
   const out = {
     schema: SCHEMA,
     settings: { ...def, ...s, ais, privacy: { ...def.privacy, ...(s.privacy || {}) }, limits: { ...def.limits, ...(s.limits || {}) } },
+    queue: Array.isArray(db.queue) ? db.queue : [],
     projects: (db.projects || []).map(p => ({ ...newProject(p.name), ...p, memories: p.memories || [],
       chats: (p.chats || []).map(c => ({ ...c, turns: (c.turns || []).map(migrateTurn) })) })),
   };

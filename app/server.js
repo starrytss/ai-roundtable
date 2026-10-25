@@ -11,6 +11,9 @@ const sec = require('./lib/security');
 const { workdirFor, resolveInside, listFiles } = require('./lib/workspace');
 const { BRIEF_FIELDS, MEM_LABEL } = require('./lib/context');
 const outputs = require('./lib/outputs');
+const { search } = require('./lib/search');
+const crypto = require('crypto');
+const IMG_TYPES = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif' };
 const { diff } = require('./lib/diff');
 const { branchChat, copyWorkspace } = require('./lib/branch');
 
@@ -65,7 +68,27 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
     try { const chosen = JSON.parse(fs.readFileSync(firstRun, 'utf8')).auto || []; if (!store.db.settings.setupDone) for (const [k, a] of Object.entries(store.db.settings.ais)) a.mode = chosen.includes(k) ? 'auto' : 'manual'; store.save(); } catch {}
     fs.rmSync(firstRun, { force: true });
   }
-  const engine = createEngine({ store, skills: () => scanSkills() });
+  const engine = createEngine({ store, skills: () => scanSkills(), onIdle: () => processQueue() });
+  const attachDir = (pid, cid) => path.join(paths.dataDir, 'attachments', pid, cid);
+  // 任務佇列：一次跑一個；重開程式時不自動開始，先暫停讓使用者確認
+  if ((store.db.queue || []).some(q => q.status === 'queued' || q.status === 'running')) {
+    for (const q of store.db.queue) if (q.status === 'running') q.status = 'interrupted';
+    store.db.queuePaused = true; store.save();
+  }
+  function processQueue() {
+    const Q = store.db.queue || [];
+    for (const q of Q.filter(x => x.status === 'running')) {   // 更新剛結束的那一項
+      const t = findC(findP(q.pid), q.cid)?.turns.find(x => x.id === q.turnId);
+      if (t && !['running'].includes(t.status)) { q.status = 'finished'; q.result = t.status; q.endedAt = Date.now(); }
+    }
+    if (engine.busy || store.db.queuePaused) return store.save();
+    const next = Q.find(x => x.status === 'queued');
+    if (next) {
+      try { const r = engine.start(next.req); Object.assign(next, { status: 'running', turnId: r.turnId, startedAt: Date.now() }); }
+      catch (e) { Object.assign(next, { status: 'failed', error: e.message, endedAt: Date.now() }); setImmediate(processQueue); }
+    }
+    store.save();
+  }
 
   // 連接埠被其他程式占用時改用下一個，不會去結束別人的程式
   const server = http.createServer();
@@ -123,12 +146,13 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
 
   function stateView() {
     const s = db().settings;
-    const ais = Object.fromEntries(Object.entries(s.ais).map(([k, a]) => [k, { ...a, guarantee: a.mode === 'manual' ? null : providers.guarantee(a), needsAck: providers.needsAck(a),
+    const ais = Object.fromEntries(Object.entries(s.ais).map(([k, a]) => [k, { ...a, guarantee: a.mode === 'manual' ? null : providers.guarantee(a), needsAck: providers.needsAck(a), seat: !DEFAULT_AIS()[k],
+      caps: providers.capabilities(a), imageNote: (providers.PROVIDERS[a.provider] || {}).imageNote || '', modelNote: (providers.PROVIDERS[a.provider] || {}).modelNote || '',
       records: (providers.PROVIDERS[a.provider] || {}).records || [], untested: !!(providers.PROVIDERS[a.provider] || {}).untested, argvPrompt: !!(providers.PROVIDERS[a.provider] || {}).argvPrompt }]));
     return {
       version: VERSION, settings: { ...s, ais, briefTemplates: s.briefTemplates || defaultBriefs(), relayTemplates: s.relayTemplates || defaultRelays() },
       outputTemplates: Object.entries(outputs.OUTPUT_TEMPLATES).map(([key, v]) => ({ key, name: v.name })), levels: providers.LEVELS.map(k => ({ key: k, label: providers.LEVEL_LABEL[k] })),
-      briefFields: BRIEF_FIELDS, memLabels: MEM_LABEL,
+      briefFields: BRIEF_FIELDS, memLabels: MEM_LABEL, queue: (db().queue || []).slice(-50).map(({ req, ...q }) => ({ ...q, q: String(req?.q || '').slice(0, 60), ids: req?.ids, mode: req?.mode })), queuePaused: !!db().queuePaused,
       projects: db().projects.map(p => ({ ...p, materials: (p.materials || []).map(({ text, ...m }) => ({ ...m, chars: (text || '').length })), chats: p.chats.map(c => ({ id: c.id, title: c.title, updated: c.updated, status: (c.turns.at(-1) || {}).status, branchOf: c.branchOf ? { cid: c.branchOf.cid, title: c.branchOf.title } : undefined })).sort((a, b) => b.updated - a.updated) })),
       privacy: { ...store.state, dataDir: paths.dataDir, workRoot: paths.workRoot, backups: store.listBackups().length },
       run: engine.state(),
@@ -149,7 +173,7 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
       case '/api/chat/new': { if (!p) throw new Error('找不到專案'); const c = { id: uid(), title: '新對話', updated: Date.now(), turns: [] }; p.chats.push(c); store.save(); return { id: c.id }; }
       case '/api/chat/delete':
         if (engine.state()?.cid === b.cid) throw new Error('這個對話正在討論中');
-        if (p) { p.chats = p.chats.filter(c => c.id !== b.cid); store.save(); } return;
+        if (p) { p.chats = p.chats.filter(c => c.id !== b.cid); fs.rmSync(attachDir(p.id, String(b.cid).replace(/[^a-z0-9]/gi, '')), { recursive: true, force: true }); store.save(); } return;
       case '/api/chat/rename': { const c = findC(p, b.cid); if (c && String(b.title || '').trim()) { c.title = String(b.title).trim().slice(0, 60); store.save(); } return; }
       case '/api/memory/add': {
         if (!p || !String(b.text || '').trim()) throw new Error('沒有要加入的內容');
@@ -189,7 +213,7 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
           if (a.provider === 'custom' && !a.cmd) a.mode = 'manual';
         }
         if (b.privacy) { if (typeof b.privacy.redact === 'boolean') S.privacy.redact = b.privacy.redact; if (typeof b.privacy.reduceTraffic === 'boolean') S.privacy.reduceTraffic = b.privacy.reduceTraffic; }
-        if (b.limits) for (const [k, lo, hi] of [['maxCalls', 1, 100], ['maxRetries', 0, 10], ['timeoutMin', 1, 60], ['budgetChars', 4000, 200000]]) if (Number.isFinite(+b.limits[k])) S.limits[k] = Math.max(lo, Math.min(hi, Math.round(+b.limits[k])));
+        if (b.limits) for (const [k, lo, hi] of [['maxCalls', 1, 100], ['maxRetries', 0, 10], ['timeoutMin', 1, 60], ['budgetChars', 4000, 200000], ['maxMinutes', 1, 600]]) if (Number.isFinite(+b.limits[k])) S.limits[k] = Math.max(lo, Math.min(hi, Math.round(+b.limits[k])));
         store.save(); return stateView();
       }
       case '/api/settings/reset-ai': { const def = DEFAULT_AIS()[b.id]; if (def) { S.ais[b.id] = { ...def }; store.save(); } return stateView(); }
@@ -311,6 +335,68 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
         store.save(); return { relayTemplates: S.relayTemplates };
       }
       case '/api/relay/delete': S.relayTemplates = (S.relayTemplates || defaultRelays()).filter(x => x.name !== b.name); store.save(); return { relayTemplates: S.relayTemplates };
+      case '/api/attachments/add': {
+        const c = findC(p, b.cid); if (!c) throw new Error('找不到對話');
+        const mime = String(b.mime || ''), ext = IMG_TYPES[mime]; if (!ext) throw new Error('只接受 PNG、JPG、WebP、GIF 圖片');
+        const buf = Buffer.from(String(b.data || ''), 'base64'); if (!buf.length) throw new Error('圖片是空的');
+        if (buf.length > 10 * 1024 * 1024) throw new Error('圖片超過 10 MB');
+        const sig = buf.slice(0, 12).toString('hex');   // 確認檔案內容真的是宣稱的圖片格式
+        const okSig = { '.png': sig.startsWith('89504e47'), '.jpg': sig.startsWith('ffd8ff'), '.gif': sig.startsWith('47494638'), '.webp': sig.startsWith('52494646') && sig.slice(16, 24) === '57454250' }[ext];
+        if (!okSig) throw new Error('檔案內容不是宣稱的圖片格式');
+        const id = uid(), file = id + ext, d = attachDir(p.id, c.id); fs.mkdirSync(d, { recursive: true });
+        fs.writeFileSync(path.join(d, file), buf);
+        const a = { id, name: String(b.name || file).replace(/[\\/:*?"<>|]/g, '_').slice(0, 80), file, path: path.join(d, file), mime, bytes: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex'), at: Date.now() };
+        (c.attachments = c.attachments || []).push(a); store.save();
+        const { path: _p, ...pub } = a; return { attachment: pub };
+      }
+      case '/api/attachments/delete': {
+        const c = findC(p, b.cid), a = c && (c.attachments || []).find(x => x.id === b.id); if (!a) return;
+        fs.rmSync(a.path, { force: true }); c.attachments = c.attachments.filter(x => x !== a); store.save(); return;
+      }
+      case '/api/models': {
+        const a = S.ais[b.id], P = a && providers.PROVIDERS[a.provider]; if (!P) throw new Error('找不到這個 AI');
+        const list = await Promise.resolve(P.models ? P.models() : []);
+        return { models: list.map(x => (typeof x === 'string' ? { id: x, name: x } : x)), note: P.modelNote || '' };
+      }
+      case '/api/ais/add': {   // 新增席位：同一家 AI 用不同模型或角色多坐一位
+        const prov = ['claude', 'codex', 'gemini', 'grok'].includes(b.provider) ? b.provider : null; if (!prov) throw new Error('請選擇 AI 類型');
+        const id = 'seat' + uid().slice(-8);
+        S.ais[id] = { ...DEFAULT_AIS()[{ codex: 'chatgpt', claude: 'claude', gemini: 'gemini', grok: 'grok' }[prov]], name: String(b.name || '').trim().slice(0, 30) || '新席位', model: String(b.model || '').trim().slice(0, 80), role: String(b.role || '').trim().slice(0, 300), ack: false };
+        store.save(); return stateView();
+      }
+      case '/api/ais/delete': {
+        if (DEFAULT_AIS()[b.id]) throw new Error('內建的四個 AI 不能刪除，可以改成手動貼上或不勾選');
+        if (engine.busy) throw new Error('討論進行中，請等它結束');
+        delete S.ais[b.id]; store.save(); return stateView();
+      }
+      case '/api/chat/tags': {
+        const c = findC(p, b.cid); if (!c) throw new Error('找不到對話');
+        c.tags = [...new Set((b.tags || []).map(x => String(x).trim().replace(/^#/, '').slice(0, 20)).filter(Boolean))].slice(0, 10); store.save(); return { tags: c.tags };
+      }
+      case '/api/step/favorite': {   // 收藏重要回答：和專案記憶分開，不會自動傳給 AI
+        const c = findC(p, b.cid), t = c && c.turns.find(x => x.id === b.turnId), st = t && t.steps.find(x => x.id === b.stepId);
+        if (!st) throw new Error('找不到這則回答'); st.favorite = !!b.on; store.save(); return { favorite: st.favorite };
+      }
+      case '/api/search': return { results: search(db(), { q: b.q, tag: b.tag, ai: b.ai, from: +b.from || 0, to: +b.to || 0, fav: !!b.fav, pid: b.allProjects === false ? b.pid : '' }) };
+      case '/api/queue/add': {
+        const Q = (db().queue = db().queue || []);
+        const prob = engine.preview(b).problem; if (prob) throw Object.assign(new Error(prob.text), { code: prob.code });
+        if (!b.cid) throw new Error('找不到對話');
+        Q.push({ id: uid(), pid: b.pid, cid: b.cid, req: b, status: 'queued', at: Date.now() });
+        store.save(); processQueue(); return { queue: db().queue.length };
+      }
+      case '/api/queue/cancel': { const q = (db().queue || []).find(x => x.id === b.id && x.status === 'queued'); if (q) { q.status = 'canceled'; q.endedAt = Date.now(); store.save(); } return; }
+      case '/api/queue/clear': db().queue = (db().queue || []).filter(x => ['queued', 'running'].includes(x.status)); store.save(); return;
+      case '/api/queue/resume': db().queuePaused = !!b.pause; for (const q of db().queue || []) if (q.status === 'interrupted') q.status = 'queued'; store.save(); processQueue(); return;
+      case '/api/prefs/vote': {   // 匿名比較：只記錄你的偏好，不代表事實正確率
+        const c = findC(p, b.cid), t = c && c.turns.find(x => x.id === b.turnId); if (!t) throw new Error('找不到這場討論');
+        const pool = t.steps.filter(x => x.kind === 'answer' && x.round === (b.round | 0) && x.status === 'ok' && !x.superseded), win = pool.find(x => x.id === b.stepId);
+        if (!win || pool.length < 2) throw new Error('至少要有兩個回答才能比較');
+        (S.prefs = S.prefs || []).push({ at: Date.now(), task: String(b.task || '一般').slice(0, 20), winner: win.ai, others: pool.filter(x => x !== win).map(x => x.ai), turnId: t.id, round: b.round | 0 });
+        t.votes = t.votes || {}; t.votes[b.round | 0] = win.id; store.save(); return { stats: prefStats(S) };
+      }
+      case '/api/prefs/stats': return { stats: prefStats(S) };
+      case '/api/prefs/clear': S.prefs = []; store.save(); return { stats: prefStats(S) };
       case '/api/bye': if (open) setTimeout(() => { if (!engine.busy && Date.now() - lastHit > 4000) quit(); }, 6000); return;
     }
     throw new Error('未知的操作');
@@ -322,6 +408,16 @@ async function main({ port = Number(arg('--port', 3456)), dataDir = arg('--data-
   return { server, port: actual, token, store, engine, paths, quit };
 }
 
+// 依任務類型統計「你選它的比例」；不是正確率，也不代表某家 AI 客觀比較好
+function prefStats(S) {
+  const by = {};
+  for (const v of S.prefs || []) {
+    const t = (by[v.task] = by[v.task] || {});
+    for (const ai of [v.winner, ...v.others]) { t[ai] = t[ai] || { seen: 0, chosen: 0 }; t[ai].seen++; }
+    t[v.winner].chosen++;
+  }
+  return { total: (S.prefs || []).length, byTask: by };
+}
 // 安裝：先顯示來源網址並要求輸入 Y 才下載執行，不會無提示執行遠端腳本
 function installScript(cmd) {
   const url = (cmd.match(/https:\/\/\S+/) || [])[0];

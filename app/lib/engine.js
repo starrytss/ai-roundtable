@@ -1,7 +1,7 @@
 // 討論引擎：每位 AI、每一輪都是一個「步驟」，逐步存檔，可單獨重試、重開後續跑，結束時計算真實狀態
 const { uid } = require('./store');
 const { computeStatus, live, lastRound } = require('./status');
-const { buildPayload, readSources, BRIEF_FIELDS } = require('./context');
+const { buildPayload, readSources, BRIEF_FIELDS, imageMode } = require('./context');
 const providers = require('./providers');
 const { run } = require('./runner');
 const { classify } = require('./errors');
@@ -14,7 +14,16 @@ const SECTION_KEYS = ['instructions', 'materials', 'memory', 'history', 'skills'
 const INPUTS = ['previous', 'all', 'question'];
 const err = (code, text, extra = {}) => Object.assign(new Error(text), { code, ...extra });
 
-function createEngine({ store, skills = () => [], runCli = run, onChange = () => {} }) {
+// 新增資訊估算：和上一輪所有回答比較字元三連組的重疊；只是文字相似度，不代表內容正確或有價值
+const grams = t => { const s = String(t || '').replace(/\s+/g, ''), g = new Set(); for (let i = 0; i < s.length - 2; i++) g.add(s.slice(i, i + 3)); return g; };
+function novelty(text, prev) {
+  const a = grams(text); if (!a.size) return 1;
+  let best = 0;
+  for (const p of prev) { const b = grams(p); let inter = 0; for (const x of a) if (b.has(x)) inter++; best = Math.max(best, inter / a.size); }
+  return Math.round((1 - best) * 100) / 100;
+}
+
+function createEngine({ store, skills = () => [], runCli = run, onChange = () => {}, onIdle = () => {} }) {
   const db = () => store.db, S = () => store.db.settings;
   let active = null;   // { pid, cid, turnId, ac, manual: Map(stepId → {resolve, prompt, ai}), busy: Map(stepId → {since, ai, round, kind, events}) }
 
@@ -51,6 +60,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const brief = req.brief && typeof req.brief.fields === 'object' ? { fields: Object.fromEntries(BRIEF_FIELDS.map(([k]) => [k, String(req.brief.fields[k] || '').slice(0, 2000)])), ask: (req.brief.ask || []).filter(k => BRIEF_FIELDS.some(([f]) => f === k)), template: String(req.brief.template || '').slice(0, 60) } : null;
     return { q: String(req.q).trim(), ids, mod, modOutside, allowOutside, rounds, solo, mode: MODES.includes(req.mode) ? req.mode : 'discuss', include, redact: req.redact ?? S().privacy.redact,
       pause: relay ? req.review !== false : !!req.pause && !solo && rounds > 1, quote, brief, relay, stages,
+      images: Array.isArray(req.images) ? req.images.map(String).slice(0, 5) : [],
       outputTemplate: OUTPUT_TEMPLATES[req.outputTemplate] ? req.outputTemplate : '', materials: Array.isArray(req.materials) ? req.materials.map(String).slice(0, 50) : null };
   }
   function recipients(n) {
@@ -77,7 +87,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const n = normalize(req), { p, c } = find(req.pid, req.cid);
     if (!p) throw err('input', '找不到專案');
     const est = estimate(n);
-    const turn = { id: 'preview', q: n.q, mode: n.mode, ids: n.ids, rounds: n.rounds, steps: [], notes: [], quote: n.quote, brief: n.brief, stages: n.stages, outputTemplate: n.outputTemplate, materials: n.materials };
+    const turn = { id: 'preview', q: n.q, mode: n.mode, ids: n.ids, rounds: n.rounds, steps: [], notes: [], quote: n.quote, brief: n.brief, stages: n.stages, outputTemplate: n.outputTemplate, materials: n.materials, images: pickImages(c, n.images) };
     const table = new Map(), budget = S().limits.budgetChars, sk = skills();
     const per = recipients(n).map(r => {
       const ai = S().ais[r.ai], base = { project: p, chat: c || { turns: [] }, turn, ai, aiId: r.ai, names: names(), include: n.include, redact: n.redact, table, budget, skills: sk };
@@ -85,7 +95,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
         : r.roles.includes('participant') ? buildPayload({ ...base, round: 1 }) : null;
       const summary = r.roles.includes('moderator') ? buildPayload({ ...base, kind: 'summary' }) : null;
       const inv = ai.mode === 'auto' ? providers.invocation(ai, { workdir: '.' }) : null;
-      return { ...r, answer, summary, argvPrompt: !!inv?.argvPrompt, missing: inv?.missing || null };
+      return { ...r, answer, summary, argvPrompt: !!inv?.argvPrompt, missing: inv?.missing || null, image: turn.images.length ? imageMode(ai) : null };
     });
     let problem = null; try { check(n, est); } catch (e) { problem = { code: e.code, text: e.message, ai: e.ai }; }
     return { recipients: per, estimate: est, moderator: n.mod, modOutside: n.modOutside, solo: n.solo, problem, redact: n.redact };
@@ -109,7 +119,9 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
           onChange();
         });
       } else {
-        const inv = providers.invocation(step.kind === 'analysis' ? { ...ai, level: 'text' } : ai, { workdir: ctx.workdir, reduceTraffic: S().privacy.reduceTraffic });   // 查核整理只看文字，不開工具
+        const imgs = step.kind === 'analysis' ? [] : (t.images || []).map(x => ({ path: x.path, mime: x.mime }));
+        if (imgs.length && imageMode(ai) === 'tool') copyImages(ctx);   // 只有需要用工具看圖的 AI 參與時，才把圖片放進工作資料夾
+        const inv = providers.invocation(step.kind === 'analysis' ? { ...ai, level: 'text' } : ai, { workdir: ctx.workdir, reduceTraffic: S().privacy.reduceTraffic, images: imgs });   // 查核整理只看文字，不開工具
         if (inv.missing) throw err('missing', `找不到程式 ${inv.missing}`);
         const r = await runCli(inv, payload.prompt, { cwd: ctx.workdir, timeoutMs: S().limits.timeoutMin * 60000, signal: active.ac.signal,
           onEvent: ev => { if (ev.type !== 'text') { busy.events.push(ev); if (busy.events.length > 60) busy.events.shift(); } busy.last = ev; onChange(); } });
@@ -146,6 +158,14 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
       const a = Promise.all(autos.map(s => execStep(ctx, s)));   // 自動的同時進行，手動的依序貼上
       for (const s of manuals) { if (aborted()) break; await execStep(ctx, s); }
       await a;
+      if (r > 1) {   // 收斂提示：這一輪和上一輪的文字重疊很高時，建議直接總結或改成針對分歧查證
+        const prev = live(t).filter(x => x.kind === 'answer' && x.round === r - 1 && x.status === 'ok').map(x => x.text);
+        const cur = live(t).filter(x => x.kind === 'answer' && x.round === r && x.status === 'ok');
+        for (const x of cur) x.novelty = novelty(x.text, prev);
+        const avg = cur.length ? cur.reduce((n, x) => n + x.novelty, 0) / cur.length : 1;
+        t.hints = (t.hints || []).filter(h => h.round !== r);
+        if (cur.length && avg < 0.25) t.hints.push({ code: 'low_novelty', round: r, avg: Math.round(avg * 100) / 100 });
+      }
       // 每輪後暫停：還有後續輪次或總結時停下來，等使用者補充、略過或決定直接總結
       if (t.pause && !aborted() && live(t).some(s => s.status === 'pending')) { t.waitingAfter = r; return; }
     }
@@ -173,12 +193,15 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
   function launch(ctx) {
     if (active) throw err('busy', '已有討論在進行中，請等它結束或按中止');
     active = { pid: ctx.p.id, cid: ctx.c.id, turnId: ctx.t.id, ac: new AbortController(), manual: new Map(), busy: new Map(), at: Date.now() };
-    ctx.t.status = 'running'; ctx.t.stopped = false; ctx.t.reasons = [];
+    ctx.t.status = 'running'; ctx.t.stopped = false; ctx.t.reasons = []; ctx.t.stopReason = null;
     ctx.workdir = workdirFor(store.paths.workRoot, ctx.p.id, ctx.c.id);
     ctx.table = new Map(ctx.t.maskTable || []);
     copyMaterials(ctx);
     store.save(); onChange();
-    const done = runPending(ctx).catch(e => { ctx.t.engineError = e.message; }).finally(() => { finish(ctx); active = null; store.save(); onChange(); });
+    const maxMin = S().limits.maxMinutes || 0;   // 整場討論的時間上限，到了就停止並註明原因
+    const limit = maxMin ? setTimeout(() => { if (active && active.turnId === ctx.t.id) { ctx.t.stopReason = 'time_limit'; stop(); } }, maxMin * 60000) : null;
+    if (limit && limit.unref) limit.unref();
+    const done = runPending(ctx).catch(e => { ctx.t.engineError = e.message; }).finally(() => { clearTimeout(limit); finish(ctx); active = null; store.save(); onChange(); setImmediate(onIdle); });
     return { turnId: ctx.t.id, done };
   }
 
@@ -187,7 +210,7 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     const { p, c } = find(req.pid, req.cid);
     if (!c) throw err('input', '找不到對話');
     const t = { id: uid(), q: n.q, at: Date.now(), mode: n.mode, rounds: n.rounds, ids: n.ids, mod: n.mod, modOutside: n.modOutside,
-      include: n.include, redact: n.redact, notes: [], steps: [], pause: n.pause, quote: n.quote, brief: n.brief, stages: n.stages || undefined, outputTemplate: n.outputTemplate, materials: n.materials,
+      include: n.include, redact: n.redact, notes: [], steps: [], pause: n.pause, quote: n.quote, brief: n.brief, stages: n.stages || undefined, outputTemplate: n.outputTemplate, materials: n.materials, images: pickImages(c, n.images),
       levels: Object.fromEntries(recipients(n).map(r => [r.ai, r.mode === 'manual' ? 'manual' : r.level])) };
     if (n.relay) n.stages.forEach((x, i) => t.steps.push({ id: uid(), kind: 'stage', round: i + 1, ai: x.ai, status: 'pending', attempts: 0 }));
     else for (let r = 1; r <= n.rounds; r++) for (const id of n.ids) t.steps.push({ id: uid(), kind: 'answer', round: r, ai: id, status: 'pending', attempts: 0 });
@@ -270,6 +293,14 @@ function createEngine({ store, skills = () => [], runCli = run, onChange = () =>
     return launch({ p, c, t });
   }
 
+  // 這次提問附的圖片（只接受這個對話已上傳的圖片）
+  function pickImages(c, ids) { return (ids || []).map(id => (c?.attachments || []).find(a => a.id === id)).filter(Boolean).map(({ id, name, file, path: p, mime, bytes }) => ({ id, name, file, path: p, mime, bytes })); }
+  function copyImages(ctx) {
+    for (const im of ctx.t.images || []) {
+      try { const dst = resolveInside(ctx.workdir, 'attachments/' + im.file); fs.mkdirSync(path.dirname(dst), { recursive: true }); if (!fs.existsSync(dst)) fs.copyFileSync(im.path, dst); } catch {}
+    }
+  }
+
   // 共用資料裡「分享給所有 AI」的檔案放進工作資料夾 materials/，讓有讀取權限的 AI 能直接讀；只分享給部分 AI 的不放，避免繞過分享對象
   function copyMaterials(ctx) {
     const mats = (ctx.p.materials || []).filter(m => m.kind === 'file' && m.share === 'all' && m.fileName && (ctx.t.materials ? ctx.t.materials.includes(m.id) : m.auto !== false));
@@ -335,4 +366,4 @@ function parseAnalysis(text, turn, names = {}) {
 }
 const normUrl = u => { try { const x = new URL(u); return (x.host + x.pathname).replace(/\/$/, '').toLowerCase(); } catch { return String(u); } };
 
-module.exports = { createEngine, parseAnalysis };
+module.exports = { createEngine, parseAnalysis, novelty };

@@ -5,6 +5,13 @@ const { LEVEL_LABEL } = require('./providers');
 const { lastRound } = require('./status');
 const { OUTPUT_TEMPLATES: OUTPUT_SPEC } = require('./outputs');
 
+// 這位 AI 怎麼看圖：direct 直接附圖、tool 用自己的讀檔工具、manual 由使用者上傳、none 看不到
+function imageMode(ai) {
+  if (ai.mode === 'manual') return 'manual';
+  const P = require('./providers').PROVIDERS[ai.provider];
+  return !P || P.untested || ai.provider === 'custom' ? 'none' : P.image || 'none';
+}
+
 // 分工接力每一棒的任務：職務、要做的事、驗收條件
 function stageTask(turn, round) {
   const st = (turn.stages || [])[round - 1] || {};
@@ -127,13 +134,21 @@ function buildPayload({ project, chat, turn, ai, aiId, names = {}, round, kind =
 
   // 固定內容：使用者在某輪之後補充的指示，只套用到之後的輪次與總結
   const notes = (turn.notes || []).filter(n => kind !== 'answer' || n.round == null || n.round < round).map(n => n.text).join('\n');
+  const imgs = kind === 'analysis' ? [] : (turn.images || []);
+  const imgNote = !imgs.length ? '' : (() => {
+    const names = imgs.map(x => x.name).join('、'), how = imageMode(ai);
+    if (how === 'direct') return `使用者附了 ${imgs.length} 張圖片（${names}），已直接附在這則訊息裡。請依實際看到的內容回答。`;
+    if (how === 'tool') return `使用者附了 ${imgs.length} 張圖片，放在工作資料夾 attachments/（${imgs.map(x => x.file).join('、')}）。請用你的讀檔工具實際打開查看；打不開就明說，不要猜測圖片內容。`;
+    if (how === 'manual') return `使用者附了 ${imgs.length} 張圖片（${names}），請使用者把圖片一起上傳到網站。`;
+    return `使用者附了 ${imgs.length} 張圖片（${names}），但這次你看不到圖片內容。不要假設或猜測圖片裡有什麼；需要時請說明你沒有看到圖片。`;
+  })();
   const tpl = OUTPUT_SPEC[turn.outputTemplate];
   const isFinal = kind === 'summary' || (kind === 'stage' && round === (turn.stages || []).length) || (kind === 'answer' && solo);
   let task = kind === 'summary' ? `你是主持人。${M.sum}` : kind === 'analysis' ? ANALYSIS_TASK : kind === 'stage' ? stageTask(turn, round)
     : (round === 1 ? (solo ? '請回答。' : M.r1(idx)) : (solo ? '請補充或修正你的回答。' : M.rn(idx)));
   if (tpl && isFinal) task += `\n\n【成果格式：${tpl.name}】${tpl.spec}`;
   const head = rules(ai, kind === 'analysis' ? 'text' : (ai.level || 'web'));
-  const question = `【這次的問題】\n${turn.q}` + briefText(turn.brief) + (notes ? `\n\n【使用者補充】\n${notes}` : '');
+  const question = `【這次的問題】\n${turn.q}` + briefText(turn.brief) + (imgNote ? `\n\n【附加圖片】\n${imgNote}` : '') + (notes ? `\n\n【使用者補充】\n${notes}` : '');
   const tail = (kind === 'answer' ? `目前是第 ${round} 輪。` : kind === 'stage' ? `目前是第 ${round} 棒（共 ${(turn.stages || []).length} 棒）。` : '') + task;
 
   // 遮蔽：所有實際送出的文字都經過同一張代號表
@@ -183,4 +198,4 @@ function buildPayload({ project, chat, turn, ai, aiId, names = {}, round, kind =
   return { prompt, sections: sections.map(({ text, sentText, ...s }) => ({ ...s, sent: s.sent || 0, preview: (sentText ?? text).slice(0, 2000) })), findings, omitted, chars: prompt.length, overBudget: prompt.length > budget };
 }
 
-module.exports = { buildPayload, MODES, DEFAULT_INCLUDE, SECTION_LABEL, squeeze, readSources, briefText, BRIEF_FIELDS, MEM_LABEL };
+module.exports = { imageMode, buildPayload, MODES, DEFAULT_INCLUDE, SECTION_LABEL, squeeze, readSources, briefText, BRIEF_FIELDS, MEM_LABEL };

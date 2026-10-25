@@ -28,7 +28,7 @@ function computeStatus(t) {
   if (t.mode === 'relay') return relayStatus(t);
   const steps = counted(t), reasons = [];
   if (live(t).some(s => s.status === 'running')) return { status: 'running', reasons };
-  if (t.stopped) return { status: 'stopped', reasons: [{ code: 'stopped' }] };
+  if (t.stopped) return { status: 'stopped', reasons: [{ code: t.stopReason || 'stopped' }] };
   if (steps.some(s => s.status === 'interrupted')) return { status: 'interrupted', reasons: [{ code: 'interrupted' }] };
   const answers = steps.filter(s => s.kind === 'answer');
   if (steps.some(s => s.status === 'pending')) return { status: 'waiting', reasons: [{ code: t.waitingAfter ? 'paused' : 'pending', round: t.waitingAfter }] };

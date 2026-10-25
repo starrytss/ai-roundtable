@@ -39,14 +39,15 @@ const CLAUDE_TOOLS = { text: [], web: ['WebSearch', 'WebFetch'], read: ['WebSear
 
 const PROVIDERS = {
   claude: {
-    name: 'Claude Code', exe: 'claude', parser: 'claude', images: false,
+    name: 'Claude Code', exe: 'claude', parser: 'claude', image: 'direct', imageNote: '圖片直接附在訊息裡（實測可看圖，不需要開工具）',
+    models: () => ['opus', 'sonnet', 'haiku', 'fable'], modelNote: '可填別名或完整模型名稱；能用哪些模型依你的方案而定',
     guarantee(level) {
       if (level === 'exec') return { level: 'none', notes: ['Bash／PowerShell 指令沒有沙盒，可以存取整台電腦'] };
       const notes = ['工具清單由 Claude Code 的 --tools 強制，檔案工具限制在工作資料夾（--restricted）', '不載入你的 CLAUDE.md、外掛、hooks 與 MCP（--safe-mode）'];
       if (level !== 'text') notes.push('搜尋與讀網頁會連到外部網站');
       return { level: 'enforced', notes };
     },
-    build({ level, model, isolate = true, reduceTraffic = true }) {
+    build({ level, model, isolate = true, reduceTraffic = true, images = [] }) {
       const tools = CLAUDE_TOOLS[level] || [];
       const args = ['-p', '--output-format', 'stream-json', '--verbose', '--restricted', '--strict-mcp-config', '--no-session-persistence',
         '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--max-turns', '12', '--tools', tools.join(','),
@@ -54,13 +55,19 @@ const PROVIDERS = {
       if (tools.length) args.push('--allowedTools', tools.join(','));
       if (isolate) args.push('--safe-mode');
       if (model) args.push('--model', model);
-      return { args, env: reduceTraffic ? { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' } : {}, input: p => p };
+      const env = reduceTraffic ? { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' } : {};
+      if (!images.length) return { args, env, input: p => p };
+      // 有圖片：改用 stream-json 輸入，圖片以 base64 內容區塊放在同一則訊息裡（不經過命令列參數）
+      args.push('--input-format', 'stream-json');
+      return { args, env, input: p => JSON.stringify({ type: 'user', message: { role: 'user', content: [
+        ...images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.mime, data: fs.readFileSync(im.path).toString('base64') } })), { type: 'text', text: p }] } }) + '\n' };
     },
     setup: { status: ['auth', 'status'], login: 'claude auth login', logout: 'claude auth logout', install: 'irm https://claude.ai/install.ps1 | iex', page: 'https://code.claude.com/docs/en/setup', needs: ['--restricted', '--safe-mode', '--tools', 'stream-json'] },
     records: ['登入資料：%USERPROFILE%\\.claude 與 %USERPROFILE%\\.claude.json', '本程式加上 --no-session-persistence，不會在 %USERPROFILE%\\.claude\\projects 留下對話紀錄'],
   },
   codex: {
-    name: 'Codex CLI', exe: 'codex', parser: 'codex', images: true,
+    name: 'Codex CLI', exe: 'codex', parser: 'codex', image: 'direct', imageNote: '用 Codex 的 --image 參數附上圖片（實測可看圖）',
+    models: () => [codexUserModel()].filter(Boolean), modelNote: 'Codex 沒有列出模型的指令；留空會沿用你 config.toml 裡選的模型',
     guarantee(level) {
       const notes = [];
       if (atLeast(level, 'write')) notes.push('寫入限制在工作資料夾（Codex workspace-write 沙盒強制），沙盒內指令預設不能連網');
@@ -70,13 +77,14 @@ const PROVIDERS = {
       notes.push('不載入你的 config.toml（通知程式、外掛），只沿用你選的模型');
       return { level: 'partial', notes };
     },
-    build({ level, workdir, model, isolate = true }) {
+    build({ level, workdir, model, isolate = true, images = [] }) {
       const args = [];
       if (atLeast(level, 'web')) args.push('--search');
       args.push('exec', '--json', '--ephemeral', '--skip-git-repo-check', '-s', atLeast(level, 'write') ? 'workspace-write' : 'read-only', '-C', workdir);
       if (isolate) args.push('--ignore-user-config');
       const m = model || (isolate ? codexUserModel() : '');
       if (m) args.push('-m', m);
+      for (const im of images) args.push(`--image=${im.path}`);   // 用 = 的寫法，避免多值參數吃掉後面的 -
       args.push('-');
       return { args, env: {}, input: p => p };
     },
@@ -84,7 +92,8 @@ const PROVIDERS = {
     records: ['登入資料：%USERPROFILE%\\.codex\\auth.json', '本程式加上 --ephemeral，不會在 %USERPROFILE%\\.codex\\sessions 留下對話紀錄'],
   },
   gemini: {
-    name: 'Antigravity CLI', exe: 'agy', parser: 'agy', images: false,
+    name: 'Antigravity CLI', exe: 'agy', parser: 'agy', image: 'tool', imageNote: '不接受直接附圖；圖片會放進工作資料夾，由它用自己的讀檔工具打開（實測可看圖）',
+    models: async () => (await listAgyModels()), modelNote: '清單來自 agy models，依你的帳號而定',
     guarantee() {
       return { level: 'none', notes: ['實測 agy 1.4.7 在非互動模式下會直接在工作資料夾內外寫檔、不會詢問，本程式無法限制', '它也有執行指令與操作瀏覽器的工具；權限只能在提示中要求', '需要你確認了解這個風險，才會自動呼叫'] };
     },
@@ -98,14 +107,14 @@ const PROVIDERS = {
     records: ['Antigravity 會在 %USERPROFILE%\\.gemini\\antigravity-cli 保存自己的對話紀錄（conversations、conversation_summaries.db），本程式無法關閉'],
   },
   grok: {
-    name: 'Grok CLI', exe: 'grok', parser: 'text', images: false, argvPrompt: true, untested: true,
+    name: 'Grok CLI', exe: 'grok', parser: 'text', image: 'none', imageNote: '尚未驗證能否看圖，只會收到文字', models: () => [], modelNote: '尚未驗證', argvPrompt: true, untested: true,
     guarantee() { return { level: 'none', notes: ['尚未實測，權限與資料保存方式未驗證', '這個 CLI 只能把提示放在命令列參數，其他程式可能看得到'] }; },
     build() { return { args: ['-p', '{prompt}'], env: {}, input: () => '' }; },
     setup: { login: 'grok', install: 'irm https://x.ai/cli/install.ps1 | iex' },
     records: ['未驗證'],
   },
   custom: {
-    name: '自訂指令', parser: 'text', images: false,
+    name: '自訂指令', parser: 'text', image: 'none', imageNote: '無法驗證能否看圖，只會收到文字', models: () => [], modelNote: '',
     guarantee() { return { level: 'none', notes: ['自訂指令的權限與資料保存方式無法驗證'] }; },
     build({ cmd }) {
       const parts = (String(cmd).match(/"[^"]*"|\S+/g) || []).map(a => a.replace(/^"|"$/g, ''));
@@ -116,9 +125,9 @@ const PROVIDERS = {
 };
 
 // 回傳一次呼叫需要的一切；argv 裡的 {prompt} 只有 grok 與自訂指令會用到
-function invocation(ai, { workdir, reduceTraffic = true }) {
+function invocation(ai, { workdir, reduceTraffic = true, images = [] }) {
   const P = PROVIDERS[ai.provider]; if (!P) throw new Error('不支援的 AI 類型：' + ai.provider);
-  const b = P.build({ level: ai.level || 'web', workdir, model: ai.model, isolate: ai.isolate !== false, reduceTraffic, cmd: ai.cmd });
+  const b = P.build({ level: ai.level || 'web', workdir, model: ai.model, isolate: ai.isolate !== false, reduceTraffic, cmd: ai.cmd, images: P.image === 'direct' ? images : [] });
   const name = b.exe || P.exe, r = resolveExe(name);
   if (!r) return { missing: name };
   return { exe: r.exe, args: [...r.pre, ...b.args], env: b.env, input: b.input, parser: P.parser, argvPrompt: !!P.argvPrompt || b.args.includes('{prompt}'), exePath: r.path };
@@ -126,4 +135,29 @@ function invocation(ai, { workdir, reduceTraffic = true }) {
 const guarantee = ai => (PROVIDERS[ai.provider] || PROVIDERS.custom).guarantee(ai.level || 'web');
 const needsAck = ai => ai.mode === 'auto' && guarantee(ai).level === 'none' && !ai.ack;
 
-module.exports = { PROVIDERS, LEVELS, LEVEL_LABEL, resolveExe, invocation, guarantee, needsAck, codexUserModel, atLeast };
+// agy models 的輸出：每行「模型代號<Tab>顯示名稱」；結果快取 10 分鐘
+let agyCache = null;
+function listAgyModels() {
+  if (agyCache && Date.now() - agyCache.at < 600000) return Promise.resolve(agyCache.list);
+  const x = resolveExe('agy'); if (!x) return Promise.resolve([]);
+  return new Promise(res => {
+    const { execFile } = require('child_process');
+    execFile(x.exe, [...x.pre, 'models'], { timeout: 30000, windowsHide: true }, (e, out) => {
+      const list = String(out || '').split(/\r?\n/).map(l => l.split('\t')).filter(p => p.length >= 2 && /^[\w.-]+$/.test(p[0])).map(([id, name]) => ({ id, name }));
+      if (list.length) agyCache = { list, at: Date.now() };
+      res(list);
+    });
+  });
+}
+// 能力表：文字、圖片、搜尋、檔案、指令；依 CLI 實測與權限設定，不假設每個帳號都能用
+function capabilities(ai) {
+  const P = PROVIDERS[ai.provider] || PROVIDERS.custom, lv = ai.level || 'web', manual = ai.mode === 'manual';
+  if (manual) return { text: 'yes', image: 'manual', search: 'manual', files: 'no', exec: 'no' };
+  const unverified = P.untested || ai.provider === 'custom';
+  if (!unverified && P.guarantee(lv).level === 'none' && ai.provider === 'gemini') return { text: 'yes', image: P.image, search: 'yes', files: 'uncontrolled', exec: 'uncontrolled' };   // 實測無法限制
+  return { text: 'yes', image: unverified ? 'unknown' : P.image === 'none' ? 'no' : P.image,
+    search: unverified ? 'unknown' : atLeast(lv, 'web') ? 'yes' : 'off', files: unverified ? 'unknown' : atLeast(lv, 'write') ? 'write' : atLeast(lv, 'read') ? 'read' : 'off',
+    exec: unverified ? 'unknown' : lv === 'exec' ? 'yes' : 'off' };
+}
+
+module.exports = { PROVIDERS, LEVELS, LEVEL_LABEL, resolveExe, invocation, guarantee, needsAck, codexUserModel, atLeast, capabilities, listAgyModels };

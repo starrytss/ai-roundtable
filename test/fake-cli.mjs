@@ -21,7 +21,7 @@ function main() {
   const who = process.env.RT_FAKE_AS || provider;
   const rule = rules[`${who}@${round}`] || rules[who] || 'ok';
   if (process.env.RT_FAKE_LOG) fs.appendFileSync(process.env.RT_FAKE_LOG, JSON.stringify({ provider: who, round, args, stdin: prompt, cwd: process.cwd(), at: Date.now() }) + '\n');
-  const answer = round === 'analysis' ? ANALYSIS : `${who} 第${round}輪的回答`;
+  const answer = round === 'analysis' ? ANALYSIS : rule === 'same' ? `${who} 每一輪都說一樣的話，沒有新的資訊` : `${who} 第${round}輪的回答`;
   if (rule === 'hang') return setTimeout(() => {}, 1e9);
   if (rule === 'slow') return setTimeout(() => emit(answer), 1500);
   if (rule === 'login') { process.stderr.write('Error: Not logged in. Please log in.'); process.exit(1); }
