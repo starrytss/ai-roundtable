@@ -4,6 +4,26 @@ Every installer is attached to [GitHub Releases](https://github.com/starrytss/ai
 
 v1.0 to v1.4 were developed inside the samtss-lab repository. The full commit history moved here, but the commit IDs changed, so `BUILD.json` in those installers records the original samtss-lab commit. From v1.5.0 on, building the tagged commit with `npm run build` produces a byte-identical zip.
 
+## v1.6.1 (2026-10-26)
+
+Installer: [AI_Roundtable_Setup_v1.6.1.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.6.1/AI_Roundtable_Setup_v1.6.1.zip)
+SHA-256: `@@SHA@@`
+Source: tag `v1.6.1` (commit `@@COMMIT@@`; `npm run build` on this commit produces the same zip)
+
+Interface redesign
+- Warmer colors in light and dark mode (ivory and warm gray, warm charcoal in dark mode), with gold kept as the accent
+- System font for English with Chinese falling back to JhengHei; serif type for titles and headings
+- The input area has three parts: who is at the table with the discussion mode, rounds and moderator on top; the text box in the middle; tool buttons with line icons on the left and Queue and Send on the right at the bottom
+- Lighter answer cards, a conclusion card with a gold edge, and lighter action buttons below the conclusion
+- Questions you ask appear in a light bubble so the answers stand out
+- Dialogs, buttons, fields and the welcome screen use the same rounded, softer style; the five discussion modes fit in one row
+- On smaller windows the usage and masking notes under the input box are collapsed (they are still in "View what's sent"); on phones the tool buttons show icons only
+
+Fixes
+- The sidebar footer used to wrap differently in English and Chinese; it now has the same layout in both (three settings rows, then Theme and Language side by side)
+- The "Try:" examples on the welcome screen, and the example question inserted when you click a mode, now follow the interface language
+- "Materials" in the input area and "Privacy and data" in the sidebar no longer share the same English label
+
 ## v1.6.0 (2026-10-25)
 
 Installer: [AI_Roundtable_Setup_v1.6.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.6.0/AI_Roundtable_Setup_v1.6.0.zip)

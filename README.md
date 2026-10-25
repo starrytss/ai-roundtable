@@ -14,7 +14,7 @@ Seat the ChatGPT, Claude, Gemini and Grok subscriptions you already have around 
 ## Download and install
 
 1. Open the latest version on the [**Releases**](https://github.com/starrytss/ai-roundtable/releases/latest) page
-2. Under **Assets** below the release notes (expand it if collapsed), click **`AI_Roundtable_Setup_v1.6.0.zip`**
+2. Under **Assets** below the release notes (expand it if collapsed), click **`AI_Roundtable_Setup_v1.6.1.zip`**
    - You do **not** need `Source code (zip)` or `Source code (tar.gz)`. Those are for developers
 3. Right-click the downloaded zip → "Extract All". Don't run anything from inside the zip
 4. Double-click **`Setup.bat`** in the extracted folder and choose English (press Enter) or 中文
@@ -25,7 +25,7 @@ Seat the ChatGPT, Claude, Gemini and Grok subscriptions you already have around 
 **Verify the file (optional)**: every release includes `SHA256SUMS.txt`. Run this in PowerShell and compare the result with the value in that file.
 
 ```powershell
-Get-FileHash .\AI_Roundtable_Setup_v1.6.0.zip
+Get-FileHash .\AI_Roundtable_Setup_v1.6.1.zip
 ```
 
 **Upgrading**: download the new version and run `Setup.bat` again. Your conversations and settings are kept. A v1.0 plain-text `data.json` is migrated and encrypted on first launch, and the old file is left for you to delete.
@@ -73,6 +73,7 @@ Full notes are on [Releases](https://github.com/starrytss/ai-roundtable/releases
 
 | Version | Date | Highlights |
 | --- | --- | --- |
+| [v1.6.1](https://github.com/starrytss/ai-roundtable/releases/tag/v1.6.1) | 2026-10-26 | Interface redesign: warmer colors and type, a three-part input area with icon tools, the same sidebar layout in English and Chinese |
 | [v1.6.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.6.0) | 2026-10-25 | English and Chinese interface (English by default for new installs), English prompts and templates, bilingual installer; AIs answer in the language of your question |
 | [v1.5.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.5.0) | 2026-10-25 | Team roles for this chat: each AI researches its own direction and the moderator integrates; research team templates; the same AI can take two seats with different directions |
 | [v1.4.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.4.0) | 2026-10-25 | Images and design mockups, model choice and extra seats, local full-text search with tags and favorites, task queue, anonymous comparison, convergence hints and a time limit |
