@@ -7,25 +7,25 @@ Seat the ChatGPT, Claude, Gemini and Grok subscriptions you already have around 
 - Conversations stay on this computer, encrypted with your Windows account
 - Made by [SamEgg Lab (山姆蛋實驗室)](https://samtss.com/tools/ai-roundtable/) and open-sourced under the MIT license
 
-> The app's interface is in Traditional Chinese. 中文說明請看官網：https://samtss.com/tools/ai-roundtable/
+> The interface is available in English and Traditional Chinese, and the AIs answer in the language you ask in. 中文說明請看官網：https://samtss.com/tools/ai-roundtable/
 >
 > This tool is not an official product of OpenAI, Anthropic, Google or xAI.
 
 ## Download and install
 
 1. Open the latest version on the [**Releases**](https://github.com/starrytss/ai-roundtable/releases/latest) page
-2. Under **Assets** below the release notes (expand it if collapsed), click **`AI_Roundtable_Setup_v1.5.0.zip`**
+2. Under **Assets** below the release notes (expand it if collapsed), click **`AI_Roundtable_Setup_v1.6.0.zip`**
    - You do **not** need `Source code (zip)` or `Source code (tar.gz)`. Those are for developers
 3. Right-click the downloaded zip → "Extract All". Don't run anything from inside the zip
-4. Double-click **`Setup.bat`** in the extracted folder
+4. Double-click **`Setup.bat`** in the extracted folder and choose English (press Enter) or 中文
    - If Windows shows "Windows protected your PC", click "More info" → "Run anyway"
    - Choose which AIs to use. Before downloading an official installer, Setup shows its URL and waits for your confirmation
-5. When it finishes, an "AI圓桌會議" shortcut appears on your desktop. The first launch runs a connection check. Click "測試" (Test) to confirm each AI really answers
+5. When it finishes, an "AI Roundtable" shortcut appears on your desktop. The first launch runs a connection check, where you can change the language again. Click "Test" to confirm each AI really answers
 
 **Verify the file (optional)**: every release includes `SHA256SUMS.txt`. Run this in PowerShell and compare the result with the value in that file.
 
 ```powershell
-Get-FileHash .\AI_Roundtable_Setup_v1.5.0.zip
+Get-FileHash .\AI_Roundtable_Setup_v1.6.0.zip
 ```
 
 **Upgrading**: download the new version and run `Setup.bat` again. Your conversations and settings are kept. A v1.0 plain-text `data.json` is migrated and encrypted on first launch, and the old file is left for you to delete.
@@ -58,6 +58,7 @@ Get-FileHash .\AI_Roundtable_Setup_v1.5.0.zip
 - **Images and design mockups**: up to 5 per question. An AI that can't see images is told so instead of pretending
 - **Model choice and extra seats**: the same AI can take another seat with a different model or role
 - **Local search, tags, favorites, task queue and anonymous comparison**
+- **English or Chinese interface**: chosen during setup and switchable any time from the language button at the bottom of the sidebar. Prompts sent to the AIs follow the interface language, and the AIs answer in the language of your question
 
 ## Data and privacy
 
@@ -72,6 +73,7 @@ Full notes are on [Releases](https://github.com/starrytss/ai-roundtable/releases
 
 | Version | Date | Highlights |
 | --- | --- | --- |
+| [v1.6.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.6.0) | 2026-10-25 | English and Chinese interface (English by default for new installs), English prompts and templates, bilingual installer; AIs answer in the language of your question |
 | [v1.5.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.5.0) | 2026-10-25 | Team roles for this chat: each AI researches its own direction and the moderator integrates; research team templates; the same AI can take two seats with different directions |
 | [v1.4.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.4.0) | 2026-10-25 | Images and design mockups, model choice and extra seats, local full-text search with tags and favorites, task queue, anonymous comparison, convergence hints and a time limit |
 | [v1.3.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.3.0) | 2026-10-25 | Relay, shared materials, output templates and files, file panel, version diff with adoption log, discussion branches |
@@ -93,7 +95,7 @@ npm run build         # build the installer zip into dist/
 - `npm run dev` can simulate failures, exhausted quotas and more with a rules file; see the top of `scripts/dev-fake.mjs`
 - Building the same commit with `npm run build` produces a byte-identical zip. `BUILD.json` inside the installer records the commit and the SHA-256 of every file
 - Requirements and verification status are in [docs/requirements-tracker.md](docs/requirements-tracker.md)
-- Code comments and the interface are in Traditional Chinese
+- Code comments are in Traditional Chinese. Interface text is written in Chinese and translated with the dictionary in `app/ui/js/i18n-en.js`; prompts for the AIs are in `app/lib/context.js` (Chinese) and `app/lib/prompts-en.js` (English)
 
 ```
 app/server.js      local server and API

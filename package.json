@@ -1,6 +1,6 @@
 {
   "name": "ai-roundtable",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "description": "AI Roundtable: a Windows desktop app where ChatGPT, Claude, Gemini and Grok discuss together through their official command-line tools",
   "license": "MIT",

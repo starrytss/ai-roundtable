@@ -4,6 +4,26 @@ Every installer is attached to [GitHub Releases](https://github.com/starrytss/ai
 
 v1.0 to v1.4 were developed inside the samtss-lab repository. The full commit history moved here, but the commit IDs changed, so `BUILD.json` in those installers records the original samtss-lab commit. From v1.5.0 on, building the tagged commit with `npm run build` produces a byte-identical zip.
 
+## v1.6.0 (2026-10-25)
+
+Installer: [AI_Roundtable_Setup_v1.6.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.6.0/AI_Roundtable_Setup_v1.6.0.zip)
+SHA-256: `@@SHA@@`
+Source: tag `v1.6.0` (commit `@@COMMIT@@`; `npm run build` on this commit produces the same zip)
+
+English and Chinese interface
+- The whole interface is available in English and Traditional Chinese: buttons, dialogs, error messages, notes about each AI's permissions, dates and the exported Markdown
+- New installs start in English. Data created before this version keeps Chinese
+- Choose the language at the start of Setup.bat; the first launch's connection check also offers the choice, and the language button at the bottom of the sidebar switches any time
+- Only interface text is translated. AI answers, your questions and anything you typed (names, roles, notes) stay exactly as written
+- Prompts sent to the AIs follow the interface language: each prompt has a full English version (discussion modes, team roles, moderator integration, relay, fact checking, briefs, output templates)
+- The AIs answer in the language of your question, whatever the interface language. Tested with real accounts: English interface with an English question (ChatGPT and Claude, 2 rounds with team roles) and with a Chinese question, and Chinese interface with an English question
+- English built-in templates (research teams, relay teams, task briefs) when the interface is English
+- Setup.bat and the uninstaller are bilingual; the desktop shortcut is named "AI Roundtable" or "AI圓桌會議"
+- README.txt in the installer starts with an English section
+
+Notes
+- If an existing installation is reinstalled with a different language, the app keeps its current language; switch it from the sidebar
+
 ## v1.5.0 (2026-10-25)
 
 Installer: [AI_Roundtable_Setup_v1.5.0.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.5.0/AI_Roundtable_Setup_v1.5.0.zip)

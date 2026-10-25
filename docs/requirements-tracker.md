@@ -2,7 +2,7 @@
 
 Status: ✅ done　🟡 partly done　⏳ to do　⏸ deferred　(Tests: simulated = CLI simulated by `test/fake-cli.mjs`; real = real accounts and CLIs)
 
-Last updated: 2026-10-25　Version: v1.5.0 (tag `v1.5.0`, developed in starrytss/ai-roundtable); v1.4.0 (samtss-lab commit `d0f6fb6`), v1.3.0 (commit `2ef856c`), v1.2.0 (commit `d297995`) and v1.1.0 (commit `5311b68`) are kept as recoverable versions
+Last updated: 2026-10-25　Version: v1.6.0 (tag `v1.6.0`, developed in starrytss/ai-roundtable); v1.5.0; v1.4.0 (samtss-lab commit `d0f6fb6`), v1.3.0 (commit `2ef856c`), v1.2.0 (commit `d297995`) and v1.1.0 (commit `5311b68`) are kept as recoverable versions
 
 ## 2. Before starting
 
@@ -92,5 +92,6 @@ Last updated: 2026-10-25　Version: v1.5.0 (tag `v1.5.0`, developed in starrytss
 | Task queue and reply ownership | ✅ | phase4 tests: runs in order, each saved to its own chat; manual replies match step IDs |
 | Output files and versions | ✅ | phase3 and server tests (no overwrite, source, save old version back) + interface use |
 | Source matches installer | ✅ | build tests (two builds identical, bytes identical after Windows extraction) |
+| English and Chinese interface | ✅ | i18n tests (simulated) + every dialog checked in English for untranslated text + real accounts: English UI with English and Chinese questions, Chinese UI with an English question; answers followed the question language |
 | Team roles for this chat | ✅ | team tests (simulated) + real accounts: ChatGPT, Claude and a Claude seat on three directions, Claude integrating, all 7 calls succeeded |
-| Real-account tests | 🟡 | Claude, Codex, Antigravity connections and event formats; a real Claude + ChatGPT discussion, consensus and evidence, and a 2-step relay; a full discussion of the same image by all three; the v1.5 team discussion; Grok not tested; Setup.bat not run end to end on a fresh computer |
+| Real-account tests | 🟡 | Claude, Codex, Antigravity connections and event formats; a real Claude + ChatGPT discussion, consensus and evidence, and a 2-step relay; a full discussion of the same image by all three; the v1.5 team discussion; v1.6 English and mixed-language discussions; Grok not tested; Setup.bat not run end to end on a fresh computer |
