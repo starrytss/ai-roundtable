@@ -41,6 +41,8 @@ export function tr(s) {
 
 function fixText(n) {
   if (!CJK.test(n.nodeValue) || (n.parentElement && n.parentElement.closest(SKIP))) return;
+  const en = n.parentElement && n.parentElement.dataset.en;   // 同一個中文在不同地方意思不同時，直接標出英文
+  if (en) { n.nodeValue = en; return; }
   const t = tr(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t;
 }
 function fixAttrs(el) {

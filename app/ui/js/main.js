@@ -111,7 +111,7 @@ $('#log').onclick = async e => {
   const d = e.target.closest('[data-mem],[data-copysum],[data-more],[data-reask],[data-copytext],[data-exp],[data-mode],[data-retry],[data-retryall],[data-resum],[data-resume],[data-setup],[data-quote],[data-verify],[data-goto],[data-analyze],[data-iact],[data-outfile],[data-cmp],[data-branch],[data-gochat],[data-fav],[data-anon]');
   if (!d) { document.body.classList.remove('side'); return; }
   const ds = d.dataset;
-  if (ds.mode) { S.pref.mode = ds.mode; savePref(); renderComposer(); $('#q').value = ds.ex; autosize(); return $('#q').focus(); }
+  if (ds.mode) { S.pref.mode = ds.mode; savePref(); renderComposer(); $('#q').value = tr(ds.ex); autosize(); return $('#q').focus(); }   // 範例問題跟著介面語言
   if (ds.copytext) return copy(texts[ds.copytext]);
   if (ds.exp) { toggleExpand(ds.exp); return renderChat(); }
   if (ds.setup !== undefined) return openSetup();

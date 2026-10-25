@@ -335,7 +335,7 @@ export default {
   '已開啟遮蔽': 'Masking on', '讀取：': 'Read:', '搜尋：{}': 'Search: {}', '實際讀取過的來源（CLI 工具紀錄）': 'Sources actually read (CLI tool records)',
   '{} 輪': '{} rounds', '{} 棒': '{} steps', '主持人整合：{}': 'moderator integrates: {}',
   '佇列一次執行一個任務，每個任務的回答會存到它自己的對話；需要手動貼上的步驟也會標示是哪個對話。': 'The queue runs one task at a time and saves each answer to its own chat; manual-paste steps show which chat they belong to.',
-  '送出 {} 字': 'Sends {} characters', '任務類型：': 'Task type:',
+  '送出 {} 字': 'Sends {} characters', '任務類型：': 'Task type:', '試試：{}': 'Try: {}',
   '狀態：{}': 'Status: {}', '結論（主持人 {}）': 'Conclusion (moderator {})', 'AI圓桌會議備份-': 'AI-Roundtable-backup-', '以新內容取代': 'Replace with new text',
   '新增 {} 行 刪除 {} 相同 {}': '{} lines added, {} removed, {} unchanged', '新增 {} 段 刪除 {} 相同 {}': '{} paragraphs added, {} removed, {} unchanged',
   '{}；損壞的檔案保留為 {}。': '{}; the damaged file is kept as {}.', '…（已移除提示內容）': '…(prompt content removed)',
