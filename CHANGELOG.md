@@ -4,7 +4,7 @@ Every installer is attached to [GitHub Releases](https://github.com/starrytss/ai
 
 v1.0 to v1.4 were developed inside the samtss-lab repository. The full commit history moved here, but the commit IDs changed, so `BUILD.json` in those installers records the original samtss-lab commit. From v1.5.0 on, building the tagged commit with `npm run build` produces a byte-identical zip.
 
-## v1.6.1 (2026-10-26)
+## v1.6.1 (2026-10-25)
 
 Installer: [AI_Roundtable_Setup_v1.6.1.zip](https://github.com/starrytss/ai-roundtable/releases/download/v1.6.1/AI_Roundtable_Setup_v1.6.1.zip)
 SHA-256: `2873d01d4248eb972c7fce34def34c54f469abb8f26f623f9c84a24be1029b09`

@@ -73,7 +73,7 @@ Full notes are on [Releases](https://github.com/starrytss/ai-roundtable/releases
 
 | Version | Date | Highlights |
 | --- | --- | --- |
-| [v1.6.1](https://github.com/starrytss/ai-roundtable/releases/tag/v1.6.1) | 2026-10-26 | Interface redesign: warmer colors and type, a three-part input area with icon tools, the same sidebar layout in English and Chinese |
+| [v1.6.1](https://github.com/starrytss/ai-roundtable/releases/tag/v1.6.1) | 2026-10-25 | Interface redesign: warmer colors and type, a three-part input area with icon tools, the same sidebar layout in English and Chinese |
 | [v1.6.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.6.0) | 2026-10-25 | English and Chinese interface (English by default for new installs), English prompts and templates, bilingual installer; AIs answer in the language of your question |
 | [v1.5.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.5.0) | 2026-10-25 | Team roles for this chat: each AI researches its own direction and the moderator integrates; research team templates; the same AI can take two seats with different directions |
 | [v1.4.0](https://github.com/starrytss/ai-roundtable/releases/tag/v1.4.0) | 2026-10-25 | Images and design mockups, model choice and extra seats, local full-text search with tags and favorites, task queue, anonymous comparison, convergence hints and a time limit |
